@@ -177,6 +177,9 @@ if os.path.isdir(_frontend_dist):
 
     @app.get("/{full_path:path}")
     def spa_fallback(full_path: str):
+        if full_path.startswith("api/"):
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404)
         return FileResponse(os.path.join(_frontend_dist, "index.html"))
 
 else:
