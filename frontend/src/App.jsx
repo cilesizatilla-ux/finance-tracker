@@ -9,6 +9,7 @@ import Chat from './pages/Chat.jsx'
 import Analyze from './pages/Analyze.jsx'
 import Login from './pages/Login.jsx'
 import Parties from './pages/Parties.jsx'
+import Reports from './pages/Reports.jsx'
 import SharedReportView from './pages/SharedReportView.jsx'
 
 function ProtectedRoute({ children }) {
@@ -52,6 +53,7 @@ function AppRoutes() {
         <Route path="chat" element={<Chat />} />
         <Route path="analyze" element={<Analyze />} />
         <Route path="parties" element={<Parties />} />
+        <Route path="reports" element={<Reports />} />
       </Route>
     </Routes>
   )

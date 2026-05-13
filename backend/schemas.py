@@ -240,3 +240,14 @@ class ShareOut(BaseModel):
     year: int
     recipient_email: Optional[str]
     email_sent: bool
+
+
+class ShareListItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    token: str
+    month: int
+    year: int
+    recipient_email: Optional[str]
+    created_at: datetime

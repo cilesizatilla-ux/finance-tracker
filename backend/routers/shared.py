@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, or_
@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.dependencies import get_current_user
 from backend.models import Category, SharedReport, Transaction, User
-from backend.schemas import APIResponse, ShareCreate, ShareOut
+from backend.schemas import APIResponse, ShareCreate, ShareListItem, ShareOut
 
 router = APIRouter(tags=["shared"])
 
@@ -74,7 +74,8 @@ def create_share(
     current_user: User = Depends(get_current_user),
 ):
     token = str(uuid.uuid4()).replace("-", "")
-    share_url = f"http://localhost:5174/shared/{token}"
+    _frontend_base = os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")[0].strip()
+    share_url = f"{_frontend_base}/shared/{token}"
 
     shared = SharedReport(
         user_id=current_user.id,
@@ -218,3 +219,34 @@ def view_shared_report(
         "transactions": transactions_list,
         "category_breakdown": category_breakdown,
     })
+
+
+@router.get("/reports/shares", response_model=APIResponse[List[ShareListItem]])
+def list_shares(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    shares = (
+        db.query(SharedReport)
+        .filter(SharedReport.user_id == current_user.id)
+        .order_by(SharedReport.created_at.desc())
+        .all()
+    )
+    return APIResponse(data=shares)
+
+
+@router.delete("/reports/shares/{share_id}")
+def delete_share(
+    share_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    share = db.query(SharedReport).filter(
+        SharedReport.id == share_id,
+        SharedReport.user_id == current_user.id,
+    ).first()
+    if not share:
+        raise HTTPException(status_code=404, detail="Share not found.")
+    db.delete(share)
+    db.commit()
+    return APIResponse(data={"deleted": True})

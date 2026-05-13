@@ -93,4 +93,10 @@ export const shareReport = (data) =>
 export const getSharedReport = (token) =>
   api.get(`/shared/${token}`)
 
+export const listShares = () =>
+  api.get('/reports/shares')
+
+export const deleteShare = (id) =>
+  api.delete(`/reports/shares/${id}`)
+
 export default api
