@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts'
-import { getCategories, createCategory, updateCategory, getBudgetStatus } from '../api/index.js'
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
+import { getCategories, createCategory, updateCategory, deleteCategory, getBudgetStatus } from '../api/index.js'
 import CurrencyAmount from '../components/CurrencyAmount.jsx'
 
 const DEFAULT_COLORS = [
@@ -43,8 +43,13 @@ function Toast({ message, type, onClose }) {
   )
 }
 
-function AddCategoryForm({ onAdd, onCancel }) {
-  const [form, setForm] = useState({ name: '', budget: '', color: DEFAULT_COLORS[0] })
+function AddCategoryForm({ onAdd, onCancel, defaultIsIncome }) {
+  const [form, setForm] = useState({
+    name: '',
+    budget: '',
+    color: DEFAULT_COLORS[0],
+    is_income: defaultIsIncome ?? false
+  })
   const [saving, setSaving] = useState(false)
 
   const handleSubmit = async (e) => {
@@ -54,7 +59,8 @@ function AddCategoryForm({ onAdd, onCancel }) {
       await onAdd({
         name: form.name,
         budget_cents: Math.round(parseFloat(form.budget || 0) * 100),
-        color: form.color
+        color: form.color,
+        is_income: form.is_income
       })
     } finally {
       setSaving(false)
@@ -132,6 +138,32 @@ function AddCategoryForm({ onAdd, onCancel }) {
             </div>
           </div>
         </div>
+
+        {/* Type toggle */}
+        <div className="mb-5">
+          <label className="block text-xs font-medium mb-1.5" style={{ color: '#94a3b8' }}>Type</label>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setForm({ ...form, is_income: false })}
+              className={`px-4 py-2 rounded-xl text-sm font-medium border transition-colors ${
+                !form.is_income ? 'bg-red-500/15 border-red-500/40 text-red-300' : 'border-slate-700 text-slate-400 hover:bg-slate-700/40'
+              }`}
+            >
+              Expense
+            </button>
+            <button
+              type="button"
+              onClick={() => setForm({ ...form, is_income: true })}
+              className={`px-4 py-2 rounded-xl text-sm font-medium border transition-colors ${
+                form.is_income ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300' : 'border-slate-700 text-slate-400 hover:bg-slate-700/40'
+              }`}
+            >
+              Income
+            </button>
+          </div>
+        </div>
+
         <div className="flex gap-3">
           <button
             type="button"
@@ -154,10 +186,12 @@ function AddCategoryForm({ onAdd, onCancel }) {
   )
 }
 
-function CategoryCard({ cat, budgetStatus, onUpdate }) {
+function CategoryCard({ cat, budgetStatus, onUpdate, onDelete }) {
   const [editing, setEditing] = useState(false)
   const [budgetInput, setBudgetInput] = useState(((cat.budget_cents || 0) / 100).toFixed(2))
   const [saving, setSaving] = useState(false)
+  const [confirmDel, setConfirmDel] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const statusInfo = budgetStatus?.find((b) => b.category_id === cat.id || b.name === cat.name) || {}
   const spent = statusInfo.spent_cents || 0
@@ -181,6 +215,16 @@ function CategoryCard({ cat, budgetStatus, onUpdate }) {
     }
   }
 
+  const handleDelete = async () => {
+    setDeleting(true)
+    try {
+      await onDelete(cat.id)
+    } finally {
+      setDeleting(false)
+      setConfirmDel(false)
+    }
+  }
+
   return (
     <div
       className="rounded-2xl border shadow-sm overflow-hidden"
@@ -199,15 +243,45 @@ function CategoryCard({ cat, budgetStatus, onUpdate }) {
             />
             <span className="font-semibold text-white text-sm">{cat.name}</span>
           </div>
-          <span
-            className="text-xs font-semibold px-2 py-0.5 rounded-full"
-            style={{
-              backgroundColor: `${barColor}15`,
-              color: barColor
-            }}
-          >
-            {limit > 0 ? `${pct.toFixed(0)}%` : 'No limit'}
-          </span>
+          <div className="flex items-center gap-2">
+            <span
+              className="text-xs font-semibold px-2 py-0.5 rounded-full"
+              style={{ backgroundColor: `${barColor}15`, color: barColor }}
+            >
+              {limit > 0 ? `${pct.toFixed(0)}%` : 'No limit'}
+            </span>
+            {confirmDel ? (
+              <div className="flex items-center gap-1">
+                <span className="text-xs" style={{ color: '#94a3b8' }}>Delete?</span>
+                <button
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="px-2 py-0.5 rounded-lg text-xs bg-red-600 hover:bg-red-500 text-white transition-colors disabled:opacity-50"
+                >
+                  {deleting ? '…' : 'Yes'}
+                </button>
+                <button
+                  onClick={() => setConfirmDel(false)}
+                  className="px-2 py-0.5 rounded-lg text-xs border hover:bg-slate-700 transition-colors"
+                  style={{ borderColor: '#334155', color: '#94a3b8' }}
+                >
+                  No
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirmDel(true)}
+                className="p-1 rounded-lg transition-colors hover:bg-red-500/10"
+                style={{ color: '#475569' }}
+                title="Delete category"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Progress bar */}
@@ -289,11 +363,10 @@ export default function Budget() {
   const [budgetStatus, setBudgetStatus] = useState([])
   const [loading, setLoading] = useState(true)
   const [showAddForm, setShowAddForm] = useState(false)
+  const [activeTab, setActiveTab] = useState('expense')
   const [toast, setToast] = useState(null)
 
-  const showToast = (msg, type = 'success') => {
-    setToast({ message: msg, type })
-  }
+  const showToast = (msg, type = 'success') => setToast({ message: msg, type })
 
   const fetchData = async () => {
     setLoading(true)
@@ -331,15 +404,31 @@ export default function Budget() {
     }
   }
 
-  const pieData = categories
+  const handleDelete = async (id) => {
+    try {
+      await deleteCategory(id)
+      showToast('Category deleted.')
+      fetchData()
+    } catch {
+      showToast('Failed to delete category.', 'error')
+    }
+  }
+
+  const isIncome = activeTab === 'income'
+  const visibleCats = categories.filter((c) => !!c.is_income === isIncome)
+
+  const pieData = visibleCats
     .map((cat) => {
       const bs = budgetStatus.find((b) => b.category_id === cat.id || b.name === cat.name)
       return { name: cat.name, value: bs?.spent_cents || 0, fill: cat.color || DEFAULT_COLORS[0] }
     })
     .filter((d) => d.value > 0)
 
-  const totalSpent = budgetStatus.reduce((s, b) => s + (b.spent_cents || 0), 0)
-  const totalBudget = categories.reduce((s, c) => s + (c.budget_cents || 0), 0)
+  const totalSpent = visibleCats.reduce((s, cat) => {
+    const bs = budgetStatus.find((b) => b.category_id === cat.id || b.name === cat.name)
+    return s + (bs?.spent_cents || 0)
+  }, 0)
+  const totalBudget = visibleCats.reduce((s, c) => s + (c.budget_cents || 0), 0)
 
   return (
     <div className="space-y-6">
@@ -364,11 +453,32 @@ export default function Budget() {
         )}
       </div>
 
-      {/* Add form — slides in at top */}
+      {/* Tabs */}
+      <div className="flex gap-1 p-1 rounded-xl w-fit" style={{ backgroundColor: '#1e293b' }}>
+        {[
+          { key: 'expense', label: 'Expenses' },
+          { key: 'income', label: 'Income' }
+        ].map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => { setActiveTab(tab.key); setShowAddForm(false) }}
+            className={`px-5 py-2 rounded-lg text-sm font-medium transition-all ${
+              activeTab === tab.key
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Add form */}
       {showAddForm && (
         <AddCategoryForm
           onAdd={handleAdd}
           onCancel={() => setShowAddForm(false)}
+          defaultIsIncome={isIncome}
         />
       )}
 
@@ -376,13 +486,15 @@ export default function Budget() {
         {/* Category cards — col-span-3 */}
         <div className="lg:col-span-3 space-y-4">
           {/* Summary strip */}
-          {!loading && categories.length > 0 && (
+          {!loading && visibleCats.length > 0 && (
             <div
               className="rounded-2xl border px-5 py-4 flex items-center justify-between"
               style={{ backgroundColor: '#1e293b', borderColor: '#334155' }}
             >
               <div>
-                <p className="text-xs font-medium uppercase tracking-wider" style={{ color: '#64748b' }}>Total Spent</p>
+                <p className="text-xs font-medium uppercase tracking-wider" style={{ color: '#64748b' }}>
+                  {isIncome ? 'Total Income' : 'Total Spent'}
+                </p>
                 <CurrencyAmount cents={totalSpent} className="text-lg font-bold" />
               </div>
               <div className="w-px h-8" style={{ backgroundColor: '#334155' }} />
@@ -393,7 +505,7 @@ export default function Budget() {
               <div className="w-px h-8" style={{ backgroundColor: '#334155' }} />
               <div>
                 <p className="text-xs font-medium uppercase tracking-wider" style={{ color: '#64748b' }}>Categories</p>
-                <p className="text-lg font-bold text-white">{categories.length}</p>
+                <p className="text-lg font-bold text-white">{visibleCats.length}</p>
               </div>
             </div>
           )}
@@ -418,7 +530,7 @@ export default function Budget() {
                 </div>
               ))}
             </div>
-          ) : categories.length === 0 ? (
+          ) : visibleCats.length === 0 ? (
             <div
               className="rounded-2xl border flex flex-col items-center justify-center py-16"
               style={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#64748b' }}
@@ -427,16 +539,17 @@ export default function Budget() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
                   d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />
               </svg>
-              <p className="text-sm font-medium">No categories yet</p>
+              <p className="text-sm font-medium">No {isIncome ? 'income' : 'expense'} categories yet</p>
               <p className="text-xs mt-1" style={{ color: '#475569' }}>Click "Add Category" to get started</p>
             </div>
           ) : (
-            categories.map((cat) => (
+            visibleCats.map((cat) => (
               <CategoryCard
                 key={cat.id}
                 cat={cat}
                 budgetStatus={budgetStatus}
                 onUpdate={handleUpdate}
+                onDelete={handleDelete}
               />
             ))
           )}
@@ -448,7 +561,9 @@ export default function Budget() {
           style={{ backgroundColor: '#1e293b', borderColor: '#334155' }}
         >
           <div className="px-6 pt-5 pb-4 border-b" style={{ borderColor: '#334155' }}>
-            <h2 className="text-base font-semibold text-white">Spending Distribution</h2>
+            <h2 className="text-base font-semibold text-white">
+              {isIncome ? 'Income' : 'Spending'} Distribution
+            </h2>
             <p className="text-xs mt-0.5" style={{ color: '#94a3b8' }}>By category (current month)</p>
           </div>
           <div className="p-6">
@@ -462,7 +577,7 @@ export default function Budget() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
                     d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />
                 </svg>
-                <p className="text-sm">No spending data yet</p>
+                <p className="text-sm">No data yet</p>
               </div>
             ) : (
               <>
@@ -484,7 +599,6 @@ export default function Budget() {
                     <Tooltip content={<CustomPieTooltip />} />
                   </PieChart>
                 </ResponsiveContainer>
-                {/* Legend */}
                 <div className="mt-4 space-y-2">
                   {pieData.map((entry) => {
                     const pct = totalSpent > 0 ? ((entry.value / totalSpent) * 100).toFixed(1) : 0
