@@ -15,6 +15,7 @@ T = TypeVar("T")
 class APIResponse(BaseModel, Generic[T]):
     data: Optional[T] = None
     error: Optional[str] = None
+    total: Optional[int] = None
 
 
 # ---------------------------------------------------------------------------

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts'
@@ -293,6 +294,16 @@ export default function Dashboard() {
               <h2 className="text-base font-semibold text-white">Recent Transactions</h2>
               <p className="text-xs mt-0.5" style={{ color: '#94a3b8' }}>Latest activity</p>
             </div>
+            <Link
+              to="/transactions"
+              className="flex items-center gap-1 text-xs font-medium transition-colors"
+              style={{ color: '#818cf8' }}
+            >
+              View all
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </Link>
           </div>
           <div className="p-2">
             {transactions.length === 0 ? (

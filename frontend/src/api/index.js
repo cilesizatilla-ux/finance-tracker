@@ -23,6 +23,9 @@ export const updateTransaction = (id, data) =>
 export const deleteTransaction = (id) =>
   api.delete(`/transactions/${id}`)
 
+export const exportTransactions = (params = {}) =>
+  api.get('/transactions/export', { params, responseType: 'blob' })
+
 export const importCSV = (file) => {
   const formData = new FormData()
   formData.append('file', file)
@@ -42,6 +45,9 @@ export const createCategory = (data) =>
 
 export const updateCategory = (id, data) =>
   api.put(`/categories/${id}`, data)
+
+export const deleteCategory = (id) =>
+  api.delete(`/categories/${id}`)
 
 export const getCashflow = (months = 6) =>
   api.get('/reports/cashflow', { params: { months } })

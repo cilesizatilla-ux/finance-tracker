@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   getTransactions, createTransaction, updateTransaction,
-  deleteTransaction, importCSV, getCategories, createCategory,
+  deleteTransaction, importCSV, exportTransactions, getCategories, createCategory,
   getParties, createParty, extractReceipt
 } from '../api/index.js'
 import CurrencyAmount from '../components/CurrencyAmount.jsx'
@@ -499,6 +499,7 @@ export default function Transactions() {
   const [editTarget, setEditTarget] = useState(null)
   const [toast, setToast] = useState(null)
   const [csvLoading, setCsvLoading] = useState(false)
+  const [exporting, setExporting] = useState(false)
 
   const showToast = (message, type='success') => setToast({ message, type })
 
@@ -513,7 +514,7 @@ export default function Transactions() {
       const res = await getTransactions(params)
       const d = res.data
       setTransactions(d?.data || d?.items || d || [])
-      setTotal(d?.total || (Array.isArray(d) ? d.length : 0))
+      setTotal(d?.total ?? (Array.isArray(d?.data) ? d.data.length : Array.isArray(d) ? d.length : 0))
     } catch { showToast('Failed to load transactions.','error') }
     finally { setLoading(false) }
   }, [page, filters])
@@ -565,6 +566,25 @@ export default function Transactions() {
     finally { setCsvLoading(false); e.target.value='' }
   }
 
+  const handleExport = async () => {
+    setExporting(true)
+    try {
+      const params = {}
+      if (filters.start) params.start_date = filters.start
+      if (filters.end) params.end_date = filters.end
+      if (filters.category_id) params.category_id = filters.category_id
+      if (filters.type !== 'all') params.type = filters.type
+      const res = await exportTransactions(params)
+      const url = URL.createObjectURL(new Blob([res.data], { type: 'text/csv' }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `transactions_${new Date().toISOString().slice(0,10)}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch { showToast('Export failed.', 'error') }
+    finally { setExporting(false) }
+  }
+
   const handleCategoryCreated = (cat) => setCategories(prev => [...prev, cat].sort((a,b) => a.name.localeCompare(b.name)))
   const handlePartyCreated = (party) => setParties(prev => [...prev, party].sort((a,b) => a.name.localeCompare(b.name)))
 
@@ -608,6 +628,17 @@ export default function Transactions() {
           <p className="text-sm mt-1" style={{ color:'#94a3b8' }}>Manage your income and expenses</p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border transition-colors hover:bg-slate-700/50 ${exporting?'opacity-50 pointer-events-none':''}`}
+            style={{ borderColor:'#334155', color:'#94a3b8' }}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+            </svg>
+            {exporting ? 'Exporting…' : 'Export CSV'}
+          </button>
           <label className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border cursor-pointer transition-colors hover:bg-slate-700/50 ${csvLoading?'opacity-50 pointer-events-none':''}`}
             style={{ borderColor:'#334155', color:'#94a3b8' }}>
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
