@@ -43,7 +43,9 @@ function PartyModal({ party, onClose, onSaved }) {
       const res = party
         ? await updateParty(party.id, payload)
         : await createParty(payload)
-      onSaved(res.data.data)
+      const saved = res.data?.data
+      if (!saved) { setError('Unexpected server response'); return }
+      onSaved(saved)
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to save')
     } finally {
@@ -183,6 +185,7 @@ export default function Parties() {
   const [modal, setModal] = useState(null) // null | 'new' | party object
   const [deleteId, setDeleteId] = useState(null)
   const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
 
   const fetchParties = async () => {
     setLoading(true)
@@ -214,12 +217,13 @@ export default function Parties() {
   const handleDelete = async () => {
     if (!deleteId) return
     setDeleting(true)
+    setDeleteError('')
     try {
       await deleteParty(deleteId)
       setParties(prev => prev.filter(p => p.id !== deleteId))
       setDeleteId(null)
-    } catch {
-      // ignore
+    } catch (err) {
+      setDeleteError(err.response?.data?.detail || 'Failed to delete party. Please try again.')
     } finally {
       setDeleting(false)
     }
@@ -409,9 +413,12 @@ export default function Parties() {
             <p className="text-sm" style={{ color: '#94a3b8' }}>
               This will remove the party. Transactions linked to it will keep their data but lose the party association.
             </p>
+            {deleteError && (
+              <div className="px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">{deleteError}</div>
+            )}
             <div className="flex gap-3">
               <button
-                onClick={() => setDeleteId(null)}
+                onClick={() => { setDeleteId(null); setDeleteError('') }}
                 className="flex-1 py-2.5 rounded-xl text-sm font-medium border transition-colors"
                 style={{ borderColor: '#334155', color: '#94a3b8' }}
               >

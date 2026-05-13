@@ -60,6 +60,7 @@ def _send_share_email(recipient_email: str, share_url: str, month: int, year: in
         with smtplib.SMTP(smtp_host, smtp_port) as server:
             server.ehlo()
             server.starttls()
+            server.ehlo()
             server.login(smtp_user, smtp_pass)
             server.sendmail(smtp_user, recipient_email, msg.as_string())
         return True

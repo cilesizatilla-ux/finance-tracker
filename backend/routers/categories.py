@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Query
@@ -14,7 +14,7 @@ router = APIRouter(prefix="/categories", tags=["categories"])
 
 
 def _spending_this_month(category_id: int, user_id: int, db: Session) -> int:
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     from sqlalchemy import func
     total = (
         db.query(func.sum(func.abs(Transaction.amount_cents)))
@@ -42,14 +42,37 @@ def list_categories(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    from sqlalchemy import func
     q = db.query(Category).filter(_visible(current_user.id))
     if is_income is not None:
         q = q.filter(Category.is_income == is_income)
     categories = q.order_by(Category.name).all()
+
+    # Batch spending query — avoid N+1
+    now = datetime.now(timezone.utc)
+    cat_ids = [c.id for c in categories]
+    if cat_ids:
+        spending_rows = (
+            db.query(Transaction.category_id, func.sum(func.abs(Transaction.amount_cents)))
+            .filter(
+                Transaction.category_id.in_(cat_ids),
+                Transaction.user_id == current_user.id,
+                Transaction.deleted_at.is_(None),
+                Transaction.is_income.is_(False),
+                func.strftime("%m", Transaction.date) == f"{now.month:02d}",
+                func.strftime("%Y", Transaction.date) == str(now.year),
+            )
+            .group_by(Transaction.category_id)
+            .all()
+        )
+        spending_map = {cat_id: (total or 0) for cat_id, total in spending_rows}
+    else:
+        spending_map = {}
+
     out = []
     for cat in categories:
         cat_out = CategoryOut.model_validate(cat)
-        cat_out.spending_cents = _spending_this_month(cat.id, current_user.id, db)
+        cat_out.spending_cents = spending_map.get(cat.id, 0)
         out.append(cat_out)
     return APIResponse(data=out)
 
@@ -90,6 +113,8 @@ def update_category(
     ).first()
     if not cat:
         return APIResponse(error=f"Category {category_id} not found.")
+    if cat.user_id is None:
+        return APIResponse(error=f"Cannot modify the built-in category '{cat.name}'.")
 
     update_data = payload.model_dump(exclude_unset=True)
     if "name" in update_data and update_data["name"] != cat.name:
@@ -102,7 +127,7 @@ def update_category(
 
     for field, value in update_data.items():
         setattr(cat, field, value)
-    cat.updated_at = datetime.utcnow()
+    cat.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(cat)
 

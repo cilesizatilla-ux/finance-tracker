@@ -95,8 +95,9 @@ export default function Login() {
       if (!d?.access_token) { setError('Something went wrong. Please try again.'); return }
 
       const { default: api } = await import('../api/index.js')
-      localStorage.setItem('ft_token', d.access_token)
-      const meRes = await api.get('/auth/me')
+      const meRes = await api.get('/auth/me', {
+        headers: { Authorization: `Bearer ${d.access_token}` }
+      })
       login(d.access_token, meRes.data?.data)
       navigate('/')
     } catch (err) {

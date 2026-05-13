@@ -44,4 +44,7 @@ def extract_receipt(image_bytes: bytes, media_type: str) -> dict:
         end = text.rfind("}") + 1
         text = text[start:end]
 
-    return json.loads(text)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"AI returned malformed JSON: {e}") from e

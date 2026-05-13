@@ -1,28 +1,32 @@
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext.jsx'
+import api from '../api/index.js'
 
 export default function AuthCallback() {
   const navigate = useNavigate()
   const { login } = useAuth()
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const token = params.get('token')
+    let active = true
+    // Token is passed as URL fragment (#<token>) to avoid server logs
+    const token = window.location.hash.slice(1)
     if (!token) {
       navigate('/login')
       return
     }
     localStorage.setItem('ft_token', token)
-    import('../api/index.js').then(({ default: api }) => {
-      api.get('/auth/me').then((res) => {
-        login(token, res.data?.data)
-        navigate('/')
-      }).catch(() => {
-        navigate('/login?error=token_exchange_failed')
-      })
+    api.get('/auth/me').then((res) => {
+      if (!active) return
+      login(token, res.data?.data)
+      navigate('/')
+    }).catch(() => {
+      if (!active) return
+      localStorage.removeItem('ft_token')
+      navigate('/login?error=token_exchange_failed')
     })
-  }, [])
+    return () => { active = false }
+  }, [navigate, login])
 
   return (
     <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#0f172a' }}>

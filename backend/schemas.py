@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any, Generic, List, Optional, TypeVar
+from typing import Any, Generic, List, Literal, Optional, TypeVar
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 T = TypeVar("T")
 
@@ -59,12 +59,12 @@ class TransactionCreate(BaseModel):
     description: str
     amount_cents: int
     category_id: Optional[int] = None
-    source: str = "manual"
+    source: Literal["manual", "csv_import"] = "manual"
     party_id: Optional[int] = None
     invoice_number: Optional[str] = None
     tax_amount_cents: Optional[int] = None
     notes: Optional[str] = None
-    payment_method: Optional[str] = None
+    payment_method: Optional[Literal["cash", "card", "transfer", "check", "other"]] = None
     is_reconciled: bool = False
     receipt_path: Optional[str] = None
     is_recurring: bool = False
@@ -76,12 +76,12 @@ class TransactionUpdate(BaseModel):
     amount_cents: Optional[int] = None
     category_id: Optional[int] = None
     is_anomaly: Optional[bool] = None
-    source: Optional[str] = None
+    source: Optional[Literal["manual", "csv_import"]] = None
     party_id: Optional[int] = None
     invoice_number: Optional[str] = None
     tax_amount_cents: Optional[int] = None
     notes: Optional[str] = None
-    payment_method: Optional[str] = None
+    payment_method: Optional[Literal["cash", "card", "transfer", "check", "other"]] = None
     is_reconciled: Optional[bool] = None
     receipt_path: Optional[str] = None
     is_recurring: Optional[bool] = None
@@ -174,8 +174,8 @@ class ChatRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 class UserCreate(BaseModel):
-    email: str
-    password: str
+    email: EmailStr
+    password: str = Field(..., min_length=8)
     name: Optional[str] = None
 
 
@@ -209,7 +209,7 @@ class UserOut(BaseModel):
 
 class PartyCreate(BaseModel):
     name: str
-    party_type: str = "vendor"
+    party_type: Literal["vendor", "customer", "both"] = "vendor"
     tax_id: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
@@ -218,7 +218,7 @@ class PartyCreate(BaseModel):
 
 class PartyUpdate(BaseModel):
     name: Optional[str] = None
-    party_type: Optional[str] = None
+    party_type: Optional[Literal["vendor", "customer", "both"]] = None
     tax_id: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
@@ -244,8 +244,8 @@ class PartyOut(BaseModel):
 # ---------------------------------------------------------------------------
 
 class ShareCreate(BaseModel):
-    month: int
-    year: int
+    month: int = Field(..., ge=1, le=12)
+    year: int = Field(..., ge=2000, le=2100)
     recipient_email: Optional[str] = None
 
 

@@ -1,6 +1,6 @@
 import csv
 import io
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, UploadFile, File, Query
@@ -23,18 +23,21 @@ from backend.services import csv_importer
 router = APIRouter(prefix="/transactions", tags=["transactions"])
 
 
-def _enrich(txn: Transaction, db: Session) -> TransactionOut:
+def _enrich(txn: Transaction, db: Session, cat_map: dict = None) -> TransactionOut:
     out = TransactionOut.model_validate(txn)
     if txn.category_id:
-        cat = db.query(Category).filter(Category.id == txn.category_id).first()
+        if cat_map is not None:
+            cat = cat_map.get(txn.category_id)
+        else:
+            cat = db.query(Category).filter(Category.id == txn.category_id).first()
         if cat:
             out.category_name = cat.name
             out.category_color = cat.color
     return out
 
 
-def _enrich_party(txn: Transaction, db: Session, party_cache: dict) -> TransactionOut:
-    out = _enrich(txn, db)
+def _enrich_party(txn: Transaction, db: Session, party_cache: dict, cat_map: dict = None) -> TransactionOut:
+    out = _enrich(txn, db, cat_map)
     if txn.party_id:
         if txn.party_id not in party_cache:
             p = db.query(Party).filter(Party.id == txn.party_id).first()
@@ -82,8 +85,10 @@ def list_transactions(
     q = _build_query(db, current_user.id, category_id, start_date, end_date, type, is_income, search)
     total = q.count()
     txns = q.order_by(Transaction.date.desc(), Transaction.id.desc()).offset(skip).limit(limit).all()
+    cat_ids = {t.category_id for t in txns if t.category_id}
+    cat_map = {c.id: c for c in db.query(Category).filter(Category.id.in_(cat_ids)).all()} if cat_ids else {}
     party_cache: dict = {}
-    return APIResponse(data=[_enrich_party(t, db, party_cache) for t in txns], total=total)
+    return APIResponse(data=[_enrich_party(t, db, party_cache, cat_map) for t in txns], total=total)
 
 
 @router.get("/summary", response_model=APIResponse[TransactionSummary])
@@ -211,9 +216,23 @@ def create_transaction(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    from sqlalchemy import or_
     if payload.category_id is not None:
-        if not db.query(Category).filter(Category.id == payload.category_id).first():
+        if not db.query(Category).filter(
+            Category.id == payload.category_id,
+            or_(Category.user_id.is_(None), Category.user_id == current_user.id),
+        ).first():
             return APIResponse(error=f"Category {payload.category_id} not found.")
+    if payload.party_id is not None:
+        if not db.query(Party).filter(
+            Party.id == payload.party_id,
+            Party.user_id == current_user.id,
+        ).first():
+            return APIResponse(error=f"Party {payload.party_id} not found.")
+    if payload.receipt_path is not None:
+        allowed_prefix = f"/uploads/receipts/{current_user.id}/"
+        if not payload.receipt_path.startswith(allowed_prefix):
+            return APIResponse(error="Invalid receipt path.")
 
     txn = Transaction(**payload.model_dump(), user_id=current_user.id)
     txn.is_income = payload.amount_cents > 0
@@ -238,16 +257,30 @@ def update_transaction(
     if not txn:
         return APIResponse(error=f"Transaction {transaction_id} not found.")
 
+    from sqlalchemy import or_
     update_data = payload.model_dump(exclude_unset=True)
     if "category_id" in update_data and update_data["category_id"] is not None:
-        if not db.query(Category).filter(Category.id == update_data["category_id"]).first():
+        if not db.query(Category).filter(
+            Category.id == update_data["category_id"],
+            or_(Category.user_id.is_(None), Category.user_id == current_user.id),
+        ).first():
             return APIResponse(error=f"Category {update_data['category_id']} not found.")
+    if "party_id" in update_data and update_data["party_id"] is not None:
+        if not db.query(Party).filter(
+            Party.id == update_data["party_id"],
+            Party.user_id == current_user.id,
+        ).first():
+            return APIResponse(error=f"Party {update_data['party_id']} not found.")
+    if "receipt_path" in update_data and update_data["receipt_path"] is not None:
+        allowed_prefix = f"/uploads/receipts/{current_user.id}/"
+        if not update_data["receipt_path"].startswith(allowed_prefix):
+            return APIResponse(error="Invalid receipt path.")
 
     for field, value in update_data.items():
         setattr(txn, field, value)
     if "amount_cents" in update_data:
         txn.is_income = txn.amount_cents > 0
-    txn.updated_at = datetime.utcnow()
+    txn.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(txn)
     return APIResponse(data=_enrich(txn, db))
@@ -267,7 +300,7 @@ def delete_transaction(
     if not txn:
         return APIResponse(error=f"Transaction {transaction_id} not found.")
 
-    txn.deleted_at = datetime.utcnow()
+    txn.deleted_at = datetime.now(timezone.utc)
     db.commit()
     return APIResponse(data=None)
 
@@ -282,6 +315,8 @@ async def import_transactions(
         return APIResponse(error="Only CSV files are accepted.")
 
     content = await file.read()
+    if len(content) > 10 * 1024 * 1024:
+        return APIResponse(error="File too large. Maximum size is 10MB.")
     try:
         result = csv_importer.import_csv(content, db, user_id=current_user.id)
     except Exception as exc:

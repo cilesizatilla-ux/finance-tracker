@@ -167,7 +167,7 @@ export default function SharedReportView() {
                   {transactions.map((txn, i) => (
                     <tr key={i} className="border-b last:border-0 hover:bg-slate-700/20 transition-colors" style={{ borderColor: '#0f172a' }}>
                       <td className="px-5 py-3 text-xs whitespace-nowrap" style={{ color: '#64748b' }}>
-                        {new Date(txn.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        {new Date(txn.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                       </td>
                       <td className="px-4 py-3 max-w-[200px]">
                         <p className="text-white truncate">{txn.description}</p>

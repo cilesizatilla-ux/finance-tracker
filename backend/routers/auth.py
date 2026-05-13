@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from urllib.parse import urlencode
 
 import httpx
@@ -112,6 +112,8 @@ def google_callback(
     info = info_resp.json()
     if info.get("aud") != client_id:
         return RedirectResponse(f"{_frontend_url()}/login?error=audience_mismatch")
+    if not info.get("email_verified"):
+        return RedirectResponse(f"{_frontend_url()}/login?error=email_not_verified")
 
     email = info.get("email", "").lower()
     google_id = info.get("sub", "")
@@ -124,7 +126,7 @@ def google_callback(
             user.google_id = google_id
         if avatar_url and not user.avatar_url:
             user.avatar_url = avatar_url
-        user.updated_at = datetime.utcnow()
+        user.updated_at = datetime.now(timezone.utc)
         db.commit()
     else:
         user = User(email=email, name=name, google_id=google_id, avatar_url=avatar_url)
@@ -132,8 +134,8 @@ def google_callback(
         db.commit()
         db.refresh(user)
 
-    jwt = create_access_token(user.id, user.email)
-    return RedirectResponse(f"{_frontend_url()}/auth/callback?token={jwt}")
+    access_token = create_access_token(user.id, user.email)
+    return RedirectResponse(f"{_frontend_url()}/auth/callback#{access_token}")
 
 
 @router.post("/google", response_model=APIResponse[Token])
@@ -154,6 +156,8 @@ def google_login(payload: GoogleAuth, db: Session = Depends(get_db)):
     info = resp.json()
     if info.get("aud") != google_client_id:
         return APIResponse(error="Google token audience mismatch.")
+    if not info.get("email_verified"):
+        return APIResponse(error="Google account email is not verified.")
 
     email = info.get("email", "").lower()
     google_id = info.get("sub", "")
@@ -162,12 +166,11 @@ def google_login(payload: GoogleAuth, db: Session = Depends(get_db)):
 
     user = db.query(User).filter(User.email == email).first()
     if user:
-        # Update Google info if not set
         if not user.google_id:
             user.google_id = google_id
         if avatar_url and not user.avatar_url:
             user.avatar_url = avatar_url
-        user.updated_at = datetime.utcnow()
+        user.updated_at = datetime.now(timezone.utc)
         db.commit()
     else:
         user = User(email=email, name=name, google_id=google_id, avatar_url=avatar_url)

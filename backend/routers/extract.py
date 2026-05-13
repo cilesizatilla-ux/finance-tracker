@@ -38,12 +38,13 @@ async def extract_receipt_image(
     if len(content) > 5 * 1024 * 1024:
         return APIResponse(error="File too large. Maximum size is 5MB.")
 
-    # Save file
-    user_dir = f"uploads/receipts/{current_user.id}"
+    # Save file using absolute path relative to this module
+    _base = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "uploads"))
+    user_dir = os.path.join(_base, "receipts", str(current_user.id))
     os.makedirs(user_dir, exist_ok=True)
     ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else "jpg"
     filename = f"{uuid.uuid4()}.{ext}"
-    filepath = f"{user_dir}/{filename}"
+    filepath = os.path.join(user_dir, filename)
     with open(filepath, "wb") as f:
         f.write(content)
 

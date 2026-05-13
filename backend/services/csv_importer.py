@@ -29,10 +29,14 @@ def _parse_amount_cents(value: str) -> int:
     return int(round(float(value) * 100))
 
 
-def _get_or_create_category(name: str, db: Session) -> Category:
-    cat = db.query(Category).filter(Category.name == name).first()
+def _get_or_create_category(name: str, db: Session, user_id: int) -> Category:
+    from sqlalchemy import or_
+    cat = db.query(Category).filter(
+        Category.name == name,
+        or_(Category.user_id.is_(None), Category.user_id == user_id),
+    ).first()
     if cat is None:
-        cat = Category(name=name)
+        cat = Category(name=name, user_id=user_id)
         db.add(cat)
         db.flush()
     return cat
@@ -50,8 +54,13 @@ def import_csv(file_content: bytes, db: Session, user_id: int = 1) -> ImportResu
     skipped = 0
     errors = 0
 
-    # Fetch existing categories for the categorizer
-    existing_categories = [c.name for c in db.query(Category).all()]
+    # Fetch existing categories visible to this user for the categorizer
+    from sqlalchemy import or_
+    existing_categories = [
+        c.name for c in db.query(Category).filter(
+            or_(Category.user_id.is_(None), Category.user_id == user_id)
+        ).all()
+    ]
 
     for raw_row in raw_rows:
         # Normalize column names
@@ -70,10 +79,11 @@ def import_csv(file_content: bytes, db: Session, user_id: int = 1) -> ImportResu
             errors += 1
             continue
 
-        # Duplicate check: (date, description, amount_cents) already exists
+        # Duplicate check: (user, date, description, amount_cents) already exists
         duplicate = (
             db.query(Transaction)
             .filter(
+                Transaction.user_id == user_id,
                 Transaction.date == txn_date,
                 Transaction.description == description,
                 Transaction.amount_cents == amount_cents,
@@ -94,7 +104,7 @@ def import_csv(file_content: bytes, db: Session, user_id: int = 1) -> ImportResu
         except Exception:
             cat_name = "Other"
 
-        category = _get_or_create_category(cat_name, db)
+        category = _get_or_create_category(cat_name, db, user_id)
         if cat_name not in existing_categories:
             existing_categories.append(cat_name)
 

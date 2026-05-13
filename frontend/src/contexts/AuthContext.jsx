@@ -13,9 +13,12 @@ export function AuthProvider({ children }) {
     try {
       const res = await api.get('/auth/me')
       setUser(res.data?.data || null)
-    } catch {
-      localStorage.removeItem('ft_token')
-      setUser(null)
+    } catch (err) {
+      if (err.response?.status === 401) {
+        localStorage.removeItem('ft_token')
+        setUser(null)
+      }
+      // transient network errors keep the token intact; user stays logged in
     } finally {
       setLoading(false)
     }

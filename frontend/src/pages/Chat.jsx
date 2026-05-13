@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { sendChat, getStatus } from '../api/index.js'
+import { useAuth } from '../contexts/AuthContext.jsx'
 
 function RobotIcon() {
   return (
@@ -10,7 +11,7 @@ function RobotIcon() {
   )
 }
 
-function Message({ role, content }) {
+function Message({ role, content, userInitials }) {
   const isUser = role === 'user'
   return (
     <div className={`flex gap-3 ${isUser ? 'flex-row-reverse' : ''}`}>
@@ -23,7 +24,7 @@ function Message({ role, content }) {
         }`}
         style={!isUser ? { backgroundColor: '#1e293b', borderColor: '#334155', color: '#94a3b8' } : {}}
       >
-        {isUser ? 'AT' : <RobotIcon />}
+        {isUser ? userInitials : <RobotIcon />}
       </div>
 
       {/* Bubble */}
@@ -85,6 +86,11 @@ const SUGGESTIONS = [
 ]
 
 export default function Chat() {
+  const { user } = useAuth()
+  const userInitials = user?.name
+    ? user.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
+    : user?.email?.[0]?.toUpperCase() || 'U'
+
   const [messages, setMessages] = useState([WELCOME_MESSAGE])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -106,7 +112,7 @@ export default function Chat() {
     if (!message || loading) return
 
     const userMsg = { role: 'user', content: message }
-    const history = messages.filter((m) => m.role !== 'system')
+    const history = messages.slice(1).filter((m) => m.role !== 'system')
 
     setMessages((prev) => [...prev, userMsg])
     setInput('')
@@ -224,7 +230,7 @@ export default function Chat() {
             </div>
           )}
           {messages.map((msg, i) => (
-            <Message key={i} role={msg.role} content={msg.content} />
+            <Message key={i} role={msg.role} content={msg.content} userInitials={userInitials} />
           ))}
           {loading && <TypingIndicator />}
           <div ref={bottomRef} />

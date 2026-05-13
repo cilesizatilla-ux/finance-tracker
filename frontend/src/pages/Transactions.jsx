@@ -56,6 +56,7 @@ function TransactionModal({ open, onClose, onSave, categories, parties, initial,
   const [extracting, setExtracting] = useState(false)
   const [langDetected, setLangDetected] = useState(null)
   const [receiptPreview, setReceiptPreview] = useState(null)
+  const [quickAddError, setQuickAddError] = useState('')
   const fileRef = useRef()
 
   useEffect(() => {
@@ -130,18 +131,22 @@ function TransactionModal({ open, onClose, onSave, categories, parties, initial,
   const handleAddCategory = async () => {
     if (!newCatName.trim()) return
     setCatSaving(true)
+    setQuickAddError('')
     try {
       const res = await createCategory({ name: newCatName.trim(), color: newCatColor, is_income: isIncome, budget_cents: 0 })
       const newCat = res.data?.data
       if (newCat?.id) { onCategoryCreated(newCat); setForm(f => ({ ...f, category_id: String(newCat.id) })) }
       setAddingCat(false); setNewCatName(''); setNewCatColor('#6366f1')
-    } catch {} finally { setCatSaving(false) }
+    } catch (err) {
+      setQuickAddError(err.response?.data?.detail || 'Failed to create category.')
+    } finally { setCatSaving(false) }
   }
 
   // ── Quick add party ──
   const handleAddParty = async () => {
     if (!newParty.name.trim()) return
     setPartySaving(true)
+    setQuickAddError('')
     try {
       const payload = {
         ...newParty,
@@ -152,7 +157,9 @@ function TransactionModal({ open, onClose, onSave, categories, parties, initial,
       const created = res.data?.data
       if (created?.id) { onPartyCreated(created); setForm(f => ({ ...f, party_id: String(created.id) })) }
       setAddingParty(false); setNewParty({ name:'', party_type:'vendor', tax_id:'', email:'', phone:'' })
-    } catch {} finally { setPartySaving(false) }
+    } catch (err) {
+      setQuickAddError(err.response?.data?.detail || 'Failed to create party.')
+    } finally { setPartySaving(false) }
   }
 
   const handleSubmit = async (e) => {
@@ -560,6 +567,9 @@ export default function Transactions() {
     getCategories().then(r => setCategories(r.data?.data || r.data || [])).catch(() => {})
     getParties().then(r => setParties(r.data?.data || r.data || [])).catch(() => {})
   }, [])
+  useEffect(() => {
+    return () => { if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current) }
+  }, [])
 
   const handleSave = async (form) => {
     try {
@@ -582,7 +592,11 @@ export default function Transactions() {
       }
       if (editTarget) { await updateTransaction(editTarget.id, payload); showToast('Transaction updated.') }
       else { await createTransaction(payload); showToast('Transaction added.') }
-      setModalOpen(false); setEditTarget(null); setPage(0); fetchTransactions()
+      setModalOpen(false)
+      setEditTarget(null)
+      // setPage(0) triggers the fetchTransactions effect; call directly only if already on page 0
+      if (page === 0) fetchTransactions()
+      else setPage(0)
     } catch { showToast('Failed to save transaction.','error') }
   }
 
@@ -830,7 +844,7 @@ export default function Transactions() {
                     </td>
                     <td className="px-4 py-3.5">
                       <div className="flex items-center gap-1">
-                        {tx.receipt_path && (
+                        {tx.receipt_path && tx.receipt_path.startsWith('/uploads/') && (
                           <a href={tx.receipt_path} target="_blank" rel="noreferrer"
                             className="p-1.5 rounded-lg transition-colors" style={{ color:'#64748b' }}
                             onMouseEnter={e => e.currentTarget.style.backgroundColor='#33415530'}
