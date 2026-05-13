@@ -44,6 +44,7 @@ class CategoryOut(BaseModel):
     budget_cents: int
     color: str
     is_income: bool
+    user_id: Optional[int] = None
     spending_cents: int = 0  # populated by the router at query time
     created_at: datetime
     updated_at: datetime

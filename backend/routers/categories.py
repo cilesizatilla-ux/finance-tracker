@@ -123,6 +123,8 @@ def delete_category(
     ).first()
     if not cat:
         return APIResponse(error=f"Category {category_id} not found.")
+    if cat.user_id is None:
+        return APIResponse(error=f"Cannot delete the built-in category '{cat.name}'.")
 
     txn_count = (
         db.query(Transaction)

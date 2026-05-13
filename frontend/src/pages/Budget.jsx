@@ -186,7 +186,7 @@ function AddCategoryForm({ onAdd, onCancel, defaultIsIncome }) {
   )
 }
 
-function CategoryCard({ cat, budgetStatus, onUpdate, onDelete }) {
+function CategoryCard({ cat, budgetStatus, onUpdate, onDelete, canDelete }) {
   const [editing, setEditing] = useState(false)
   const [budgetInput, setBudgetInput] = useState(((cat.budget_cents || 0) / 100).toFixed(2))
   const [saving, setSaving] = useState(false)
@@ -250,7 +250,7 @@ function CategoryCard({ cat, budgetStatus, onUpdate, onDelete }) {
             >
               {limit > 0 ? `${pct.toFixed(0)}%` : 'No limit'}
             </span>
-            {confirmDel ? (
+            {canDelete && confirmDel ? (
               <div className="flex items-center gap-1">
                 <span className="text-xs" style={{ color: '#94a3b8' }}>Delete?</span>
                 <button
@@ -268,7 +268,7 @@ function CategoryCard({ cat, budgetStatus, onUpdate, onDelete }) {
                   No
                 </button>
               </div>
-            ) : (
+            ) : canDelete ? (
               <button
                 onClick={() => setConfirmDel(true)}
                 className="p-1 rounded-lg transition-colors hover:bg-red-500/10"
@@ -280,7 +280,7 @@ function CategoryCard({ cat, budgetStatus, onUpdate, onDelete }) {
                     d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                 </svg>
               </button>
-            )}
+            ) : null}
           </div>
         </div>
 
@@ -385,7 +385,8 @@ export default function Budget() {
 
   const handleAdd = async (data) => {
     try {
-      await createCategory(data)
+      const res = await createCategory(data)
+      if (res.data?.error) { showToast(res.data.error, 'error'); return }
       showToast('Category added.')
       setShowAddForm(false)
       fetchData()
@@ -396,7 +397,8 @@ export default function Budget() {
 
   const handleUpdate = async (id, data) => {
     try {
-      await updateCategory(id, data)
+      const res = await updateCategory(id, data)
+      if (res.data?.error) { showToast(res.data.error, 'error'); return }
       showToast('Budget updated.')
       fetchData()
     } catch {
@@ -406,7 +408,8 @@ export default function Budget() {
 
   const handleDelete = async (id) => {
     try {
-      await deleteCategory(id)
+      const res = await deleteCategory(id)
+      if (res.data?.error) { showToast(res.data.error, 'error'); return }
       showToast('Category deleted.')
       fetchData()
     } catch {
@@ -550,6 +553,7 @@ export default function Budget() {
                 budgetStatus={budgetStatus}
                 onUpdate={handleUpdate}
                 onDelete={handleDelete}
+                canDelete={cat.user_id != null}
               />
             ))
           )}
