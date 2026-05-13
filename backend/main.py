@@ -105,6 +105,9 @@ def on_startup():
         if "receipt_path" not in txn_cols:
             conn.execute(text("ALTER TABLE transactions ADD COLUMN receipt_path VARCHAR"))
             conn.commit()
+        if "is_recurring" not in txn_cols:
+            conn.execute(text("ALTER TABLE transactions ADD COLUMN is_recurring BOOLEAN NOT NULL DEFAULT 0"))
+            conn.commit()
 
     db = SessionLocal()
     try:

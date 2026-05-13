@@ -15,6 +15,7 @@ from backend.schemas import (
     ImportResult,
     TransactionCreate,
     TransactionOut,
+    TransactionSummary,
     TransactionUpdate,
 )
 from backend.services import csv_importer
@@ -83,6 +84,63 @@ def list_transactions(
     txns = q.order_by(Transaction.date.desc(), Transaction.id.desc()).offset(skip).limit(limit).all()
     party_cache: dict = {}
     return APIResponse(data=[_enrich_party(t, db, party_cache) for t in txns], total=total)
+
+
+@router.get("/summary", response_model=APIResponse[TransactionSummary])
+def summarize_transactions(
+    category_id: Optional[int] = Query(None),
+    start_date: Optional[date] = Query(None),
+    end_date: Optional[date] = Query(None),
+    is_income: Optional[bool] = Query(None),
+    type: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    q = _build_query(db, current_user.id, category_id, start_date, end_date, type, is_income, search)
+    txns = q.with_entities(Transaction.amount_cents, Transaction.is_income).all()
+    income = sum(t.amount_cents for t in txns if t.is_income)
+    expense = sum(abs(t.amount_cents) for t in txns if not t.is_income)
+    return APIResponse(data=TransactionSummary(
+        income_cents=income,
+        expense_cents=expense,
+        net_cents=income - expense,
+        count=len(txns),
+    ))
+
+
+@router.get("/top-categories")
+def top_categories(
+    start_date: Optional[date] = Query(None),
+    end_date: Optional[date] = Query(None),
+    limit: int = Query(5, ge=1, le=20),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from sqlalchemy import func
+    q = (
+        db.query(
+            Category.id,
+            Category.name,
+            Category.color,
+            func.sum(func.abs(Transaction.amount_cents)).label("total_cents"),
+        )
+        .join(Transaction, Transaction.category_id == Category.id)
+        .filter(
+            Transaction.deleted_at.is_(None),
+            Transaction.user_id == current_user.id,
+            Transaction.is_income.is_(False),
+        )
+    )
+    if start_date:
+        q = q.filter(Transaction.date >= start_date)
+    if end_date:
+        q = q.filter(Transaction.date <= end_date)
+    rows = q.group_by(Category.id).order_by(func.sum(func.abs(Transaction.amount_cents)).desc()).limit(limit).all()
+    return APIResponse(data=[
+        {"id": r.id, "name": r.name, "color": r.color, "total_cents": r.total_cents}
+        for r in rows
+    ])
 
 
 @router.get("/export")

@@ -67,6 +67,7 @@ class TransactionCreate(BaseModel):
     payment_method: Optional[str] = None
     is_reconciled: bool = False
     receipt_path: Optional[str] = None
+    is_recurring: bool = False
 
 
 class TransactionUpdate(BaseModel):
@@ -83,6 +84,7 @@ class TransactionUpdate(BaseModel):
     payment_method: Optional[str] = None
     is_reconciled: Optional[bool] = None
     receipt_path: Optional[str] = None
+    is_recurring: Optional[bool] = None
 
 
 class TransactionOut(BaseModel):
@@ -109,6 +111,18 @@ class TransactionOut(BaseModel):
     payment_method: Optional[str] = None
     is_reconciled: bool = False
     receipt_path: Optional[str] = None
+    is_recurring: bool = False
+
+
+# ---------------------------------------------------------------------------
+# Transaction summary
+# ---------------------------------------------------------------------------
+
+class TransactionSummary(BaseModel):
+    income_cents: int
+    expense_cents: int
+    net_cents: int
+    count: int
 
 
 # ---------------------------------------------------------------------------

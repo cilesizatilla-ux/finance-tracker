@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   getTransactions, createTransaction, updateTransaction,
-  deleteTransaction, importCSV, exportTransactions, getCategories, createCategory,
+  deleteTransaction, importCSV, exportTransactions, getTransactionSummary,
+  getCategories, createCategory,
   getParties, createParty, extractReceipt
 } from '../api/index.js'
 import CurrencyAmount from '../components/CurrencyAmount.jsx'
@@ -36,7 +37,8 @@ const PAYMENT_METHODS = ['card','cash','transfer','check','other']
 const EMPTY_FORM = {
   date: new Date().toISOString().slice(0,10),
   description:'', amount:'', category_id:'', party_id:'', source:'', type:'expense',
-  invoice_number:'', tax_amount:'', payment_method:'', notes:'', is_reconciled:false, receipt_path:''
+  invoice_number:'', tax_amount:'', payment_method:'', notes:'', is_reconciled:false,
+  receipt_path:'', is_recurring:false
 }
 
 // ─── Transaction Modal ──────────────────────────────────────────────────────
@@ -436,20 +438,36 @@ function TransactionModal({ open, onClose, onSave, categories, parties, initial,
                       style={{ backgroundColor:'#1e293b', borderColor:'#334155', color:'#f1f5f9', fontFamily:'Inter,sans-serif' }}
                       value={form.notes} onChange={set('notes')}/>
                   </div>
-                  <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                    <div
-                      onClick={() => setForm(f => ({...f, is_reconciled: !f.is_reconciled}))}
-                      className={`w-5 h-5 rounded flex items-center justify-center border transition-all flex-shrink-0 cursor-pointer ${form.is_reconciled ? 'bg-indigo-600 border-indigo-600' : ''}`}
-                      style={!form.is_reconciled ? { borderColor:'#334155' } : {}}
-                    >
-                      {form.is_reconciled && (
-                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7"/>
-                        </svg>
-                      )}
-                    </div>
-                    <span className="text-sm" style={{ color:'#94a3b8' }}>Reconciled</span>
-                  </label>
+                  <div className="flex items-center gap-6">
+                    <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                      <div
+                        onClick={() => setForm(f => ({...f, is_reconciled: !f.is_reconciled}))}
+                        className={`w-5 h-5 rounded flex items-center justify-center border transition-all flex-shrink-0 cursor-pointer ${form.is_reconciled ? 'bg-indigo-600 border-indigo-600' : ''}`}
+                        style={!form.is_reconciled ? { borderColor:'#334155' } : {}}
+                      >
+                        {form.is_reconciled && (
+                          <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7"/>
+                          </svg>
+                        )}
+                      </div>
+                      <span className="text-sm" style={{ color:'#94a3b8' }}>Reconciled</span>
+                    </label>
+                    <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                      <div
+                        onClick={() => setForm(f => ({...f, is_recurring: !f.is_recurring}))}
+                        className={`w-5 h-5 rounded flex items-center justify-center border transition-all flex-shrink-0 cursor-pointer ${form.is_recurring ? 'bg-indigo-600 border-indigo-600' : ''}`}
+                        style={!form.is_recurring ? { borderColor:'#334155' } : {}}
+                      >
+                        {form.is_recurring && (
+                          <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7"/>
+                          </svg>
+                        )}
+                      </div>
+                      <span className="text-sm" style={{ color:'#94a3b8' }}>Recurring</span>
+                    </label>
+                  </div>
                 </div>
               )}
             </div>
@@ -497,6 +515,7 @@ export default function Transactions() {
   const [filters, setFilters] = useState({ start:'', end:'', category_id:'', type:'all', search:'' })
   const [searchValue, setSearchValue] = useState('')
   const searchDebounceRef = useRef(null)
+  const [summary, setSummary] = useState(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
   const [toast, setToast] = useState(null)
@@ -524,10 +543,14 @@ export default function Transactions() {
       if (filters.category_id) params.category_id = filters.category_id
       if (filters.type !== 'all') params.type = filters.type
       if (filters.search) params.search = filters.search
-      const res = await getTransactions(params)
+      const [res, sumRes] = await Promise.all([
+        getTransactions(params),
+        getTransactionSummary({ ...params, skip: undefined, limit: undefined }),
+      ])
       const d = res.data
       setTransactions(d?.data || d?.items || d || [])
       setTotal(d?.total ?? (Array.isArray(d?.data) ? d.data.length : Array.isArray(d) ? d.length : 0))
+      setSummary(sumRes.data?.data || null)
     } catch { showToast('Failed to load transactions.','error') }
     finally { setLoading(false) }
   }, [page, filters])
@@ -555,6 +578,7 @@ export default function Transactions() {
         payment_method: form.payment_method || null,
         is_reconciled: form.is_reconciled,
         receipt_path: form.receipt_path || null,
+        is_recurring: form.is_recurring,
       }
       if (editTarget) { await updateTransaction(editTarget.id, payload); showToast('Transaction updated.') }
       else { await createTransaction(payload); showToast('Transaction added.') }
@@ -610,6 +634,7 @@ export default function Transactions() {
       type: tx.is_income ? 'income' : 'expense',
       date: tx.date ? tx.date.slice(0,10) : '',
       tax_amount: tx.tax_amount_cents ? (tx.tax_amount_cents/100).toFixed(2) : '',
+      is_recurring: tx.is_recurring || false,
     })
     setModalOpen(true)
   }
@@ -719,6 +744,25 @@ export default function Transactions() {
         )}
       </div>
 
+      {/* Period summary bar */}
+      {summary && (
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { label:'Income', cents: summary.income_cents, color:'#22c55e' },
+            { label:'Expenses', cents: summary.expense_cents, color:'#ef4444' },
+            { label:'Net', cents: summary.net_cents, color: summary.net_cents >= 0 ? '#22c55e' : '#ef4444' },
+          ].map(({ label, cents, color }) => (
+            <div key={label} className="rounded-xl border px-4 py-3 flex items-center justify-between" style={{ backgroundColor:'#1e293b', borderColor:'#334155' }}>
+              <span className="text-xs font-medium" style={{ color:'#64748b' }}>{label}</span>
+              <span className="text-sm font-bold" style={{ color }}>
+                {label === 'Net' && cents >= 0 ? '+' : label !== 'Net' ? '' : ''}
+                <CurrencyAmount cents={label === 'Expenses' ? -cents : cents} />
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Table */}
       <div className="rounded-2xl border overflow-hidden" style={{ borderColor:'#334155' }}>
         <div className="overflow-x-auto">
@@ -750,7 +794,12 @@ export default function Transactions() {
                       {tx.date ? new Date(tx.date+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—'}
                     </td>
                     <td className="px-4 py-3.5 max-w-[160px]">
-                      <div className="font-medium text-white truncate">{tx.description}</div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-medium text-white truncate">{tx.description}</span>
+                        {tx.is_recurring && (
+                          <span title="Recurring" className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-semibold" style={{ backgroundColor:'#6366f120', color:'#818cf8' }}>↻</span>
+                        )}
+                      </div>
                       {tx.invoice_number && <div className="text-[10px] mt-0.5" style={{ color:'#475569' }}>#{tx.invoice_number}</div>}
                     </td>
                     <td className="px-4 py-3.5">

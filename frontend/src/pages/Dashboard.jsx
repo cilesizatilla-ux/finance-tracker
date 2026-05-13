@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts'
-import { getCashflow, getBudgetStatus, getTransactions } from '../api/index.js'
+import { getCashflow, getBudgetStatus, getTransactions, getTopCategories } from '../api/index.js'
 import CurrencyAmount from '../components/CurrencyAmount.jsx'
 
 function SkeletonBlock({ className = '' }) {
@@ -78,20 +78,28 @@ export default function Dashboard() {
   const [cashflow, setCashflow] = useState([])
   const [budget, setBudget] = useState([])
   const [transactions, setTransactions] = useState([])
+  const [topCats, setTopCats] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
   useEffect(() => {
     const fetchAll = async () => {
+      const now = new Date()
+      const y = now.getFullYear(), m = String(now.getMonth() + 1).padStart(2, '0')
+      const monthStart = `${y}-${m}-01`
+      const lastDay = new Date(y, now.getMonth() + 1, 0).getDate()
+      const monthEnd = `${y}-${m}-${lastDay}`
       try {
-        const [cfRes, budRes, txRes] = await Promise.all([
+        const [cfRes, budRes, txRes, topRes] = await Promise.all([
           getCashflow(6),
           getBudgetStatus(),
-          getTransactions({ limit: 5, skip: 0 })
+          getTransactions({ limit: 5, skip: 0 }),
+          getTopCategories({ start_date: monthStart, end_date: monthEnd, limit: 5 }),
         ])
         setCashflow(cfRes.data?.data || cfRes.data || [])
         setBudget(budRes.data?.data || budRes.data || [])
         setTransactions(txRes.data?.data || txRes.data || [])
+        setTopCats(topRes.data?.data || [])
       } catch {
         setError('Failed to load dashboard data.')
       } finally {
@@ -160,7 +168,10 @@ export default function Dashboard() {
         <SkeletonBlock className="h-80" />
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
           <div className="lg:col-span-3"><SkeletonBlock className="h-72" /></div>
-          <div className="lg:col-span-2"><SkeletonBlock className="h-72" /></div>
+          <div className="lg:col-span-2 flex flex-col gap-6">
+            <SkeletonBlock className="h-44" />
+            <SkeletonBlock className="h-44" />
+          </div>
         </div>
       </div>
     )
@@ -342,7 +353,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Two-column grid: Recent Transactions + Budget Overview */}
+      {/* Three-column grid: Recent Transactions + Top Categories + Budget Overview */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* Recent Transactions — col-span-3 */}
         <div className="lg:col-span-3 rounded-2xl border shadow-sm" style={{ backgroundColor: '#1e293b', borderColor: '#334155' }}>
@@ -415,8 +426,45 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {/* Top Spending + Budget stacked — col-span-2 */}
+        <div className="lg:col-span-2 flex flex-col gap-6">
+
+        {/* Top Spending Categories */}
+        <div className="rounded-2xl border shadow-sm" style={{ backgroundColor: '#1e293b', borderColor: '#334155' }}>
+          <div className="px-6 pt-5 pb-4 border-b" style={{ borderColor: '#334155' }}>
+            <h2 className="text-base font-semibold text-white">Top Spending</h2>
+            <p className="text-xs mt-0.5" style={{ color: '#94a3b8' }}>By category this month</p>
+          </div>
+          <div className="p-5">
+            {topCats.length === 0 ? (
+              <p className="text-sm text-center py-6" style={{ color: '#64748b' }}>No expenses this month</p>
+            ) : (
+              <div className="space-y-3">
+                {(() => {
+                  const max = topCats[0]?.total_cents || 1
+                  return topCats.map((cat) => (
+                    <div key={cat.id}>
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: cat.color || '#6366f1' }} />
+                          <span className="text-sm text-white">{cat.name}</span>
+                        </div>
+                        <CurrencyAmount cents={-cat.total_cents} className="text-xs font-semibold" />
+                      </div>
+                      <div className="h-1.5 rounded-full" style={{ backgroundColor: '#0f172a' }}>
+                        <div className="h-1.5 rounded-full transition-all duration-500"
+                          style={{ width: `${(cat.total_cents / max) * 100}%`, backgroundColor: cat.color || '#6366f1' }} />
+                      </div>
+                    </div>
+                  ))
+                })()}
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Budget Overview — col-span-2 */}
-        <div className="lg:col-span-2 rounded-2xl border shadow-sm" style={{ backgroundColor: '#1e293b', borderColor: '#334155' }}>
+        <div className="rounded-2xl border shadow-sm" style={{ backgroundColor: '#1e293b', borderColor: '#334155' }}>
           <div className="px-6 pt-5 pb-4 border-b" style={{ borderColor: '#334155' }}>
             <h2 className="text-base font-semibold text-white">Budget Overview</h2>
             <p className="text-xs mt-0.5" style={{ color: '#94a3b8' }}>Monthly spending limits</p>
@@ -471,6 +519,8 @@ export default function Dashboard() {
             )}
           </div>
         </div>
+
+        </div>{/* end right column */}
       </div>
     </div>
   )

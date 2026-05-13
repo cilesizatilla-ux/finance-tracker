@@ -58,6 +58,7 @@ class Transaction(Base):
     payment_method = Column(String, nullable=True)  # cash | card | transfer | check | other
     is_reconciled = Column(Boolean, default=False, nullable=False, server_default="0")
     receipt_path = Column(String, nullable=True)
+    is_recurring = Column(Boolean, default=False, nullable=False, server_default="0")
 
     category = relationship("Category", back_populates="transactions")
 

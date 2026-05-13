@@ -26,6 +26,12 @@ export const deleteTransaction = (id) =>
 export const exportTransactions = (params = {}) =>
   api.get('/transactions/export', { params, responseType: 'blob' })
 
+export const getTransactionSummary = (params = {}) =>
+  api.get('/transactions/summary', { params })
+
+export const getTopCategories = (params = {}) =>
+  api.get('/transactions/top-categories', { params })
+
 export const importCSV = (file) => {
   const formData = new FormData()
   formData.append('file', file)
