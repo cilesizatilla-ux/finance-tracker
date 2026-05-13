@@ -1,8 +1,10 @@
 import os
 from datetime import datetime
+from urllib.parse import urlencode
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from backend.auth import create_access_token, hash_password, verify_password
@@ -12,6 +14,16 @@ from backend.models import User
 from backend.schemas import APIResponse, GoogleAuth, Token, UserCreate, UserLogin, UserOut
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+def _google_callback_url() -> str:
+    origin = os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")[0].strip()
+    backend_base = "http://localhost:8001" if "localhost" in origin else origin
+    return f"{backend_base}/api/v1/auth/google/callback"
+
+
+def _frontend_url() -> str:
+    return os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")[0].strip()
 
 
 @router.post("/register", response_model=APIResponse[Token], status_code=201)
@@ -40,6 +52,88 @@ def login(payload: UserLogin, db: Session = Depends(get_db)):
 
     token = create_access_token(user.id, user.email)
     return APIResponse(data=Token(access_token=token))
+
+
+@router.get("/google/redirect")
+def google_redirect():
+    client_id = os.getenv("GOOGLE_CLIENT_ID", "")
+    if not client_id:
+        raise HTTPException(status_code=501, detail="Google OAuth is not configured.")
+    params = urlencode({
+        "client_id": client_id,
+        "redirect_uri": _google_callback_url(),
+        "response_type": "code",
+        "scope": "openid email profile",
+        "access_type": "online",
+    })
+    return RedirectResponse(f"https://accounts.google.com/o/oauth2/v2/auth?{params}")
+
+
+@router.get("/google/callback")
+def google_callback(
+    code: str = Query(...),
+    error: str = Query(None),
+    db: Session = Depends(get_db),
+):
+    if error:
+        return RedirectResponse(f"{_frontend_url()}/login?error=google_denied")
+
+    client_id = os.getenv("GOOGLE_CLIENT_ID", "")
+    client_secret = os.getenv("GOOGLE_CLIENT_SECRET", "")
+    if not client_id or not client_secret:
+        return RedirectResponse(f"{_frontend_url()}/login?error=not_configured")
+
+    # Exchange authorization code for tokens
+    token_resp = httpx.post(
+        "https://oauth2.googleapis.com/token",
+        data={
+            "code": code,
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "redirect_uri": _google_callback_url(),
+            "grant_type": "authorization_code",
+        },
+        timeout=10,
+    )
+    if token_resp.status_code != 200:
+        return RedirectResponse(f"{_frontend_url()}/login?error=token_exchange_failed")
+
+    id_token_str = token_resp.json().get("id_token", "")
+
+    # Verify the ID token
+    info_resp = httpx.get(
+        "https://oauth2.googleapis.com/tokeninfo",
+        params={"id_token": id_token_str},
+        timeout=10,
+    )
+    if info_resp.status_code != 200:
+        return RedirectResponse(f"{_frontend_url()}/login?error=invalid_token")
+
+    info = info_resp.json()
+    if info.get("aud") != client_id:
+        return RedirectResponse(f"{_frontend_url()}/login?error=audience_mismatch")
+
+    email = info.get("email", "").lower()
+    google_id = info.get("sub", "")
+    name = info.get("name") or info.get("given_name") or email.split("@")[0]
+    avatar_url = info.get("picture")
+
+    user = db.query(User).filter(User.email == email).first()
+    if user:
+        if not user.google_id:
+            user.google_id = google_id
+        if avatar_url and not user.avatar_url:
+            user.avatar_url = avatar_url
+        user.updated_at = datetime.utcnow()
+        db.commit()
+    else:
+        user = User(email=email, name=name, google_id=google_id, avatar_url=avatar_url)
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+
+    jwt = create_access_token(user.id, user.email)
+    return RedirectResponse(f"{_frontend_url()}/auth/callback?token={jwt}")
 
 
 @router.post("/google", response_model=APIResponse[Token])

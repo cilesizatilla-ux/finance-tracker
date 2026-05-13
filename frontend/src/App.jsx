@@ -11,6 +11,7 @@ import Login from './pages/Login.jsx'
 import Parties from './pages/Parties.jsx'
 import Reports from './pages/Reports.jsx'
 import SharedReportView from './pages/SharedReportView.jsx'
+import AuthCallback from './pages/AuthCallback.jsx'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -39,6 +40,7 @@ function AppRoutes() {
         element={user ? <Navigate to="/" replace /> : <Login />}
       />
       <Route path="/shared/:token" element={<SharedReportView />} />
+      <Route path="/auth/callback" element={<AuthCallback />} />
       <Route
         path="/"
         element={
