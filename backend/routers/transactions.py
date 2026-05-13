@@ -32,7 +32,17 @@ def _enrich(txn: Transaction, db: Session) -> TransactionOut:
     return out
 
 
-def _build_query(db, user_id, category_id, start_date, end_date, type_filter, is_income):
+def _enrich_party(txn: Transaction, db: Session, party_cache: dict) -> TransactionOut:
+    out = _enrich(txn, db)
+    if txn.party_id:
+        if txn.party_id not in party_cache:
+            p = db.query(Party).filter(Party.id == txn.party_id).first()
+            party_cache[txn.party_id] = p.name if p else None
+        out.party_name = party_cache[txn.party_id]
+    return out
+
+
+def _build_query(db, user_id, category_id, start_date, end_date, type_filter, is_income, search=None):
     q = db.query(Transaction).filter(
         Transaction.deleted_at.is_(None),
         Transaction.user_id == user_id,
@@ -43,6 +53,8 @@ def _build_query(db, user_id, category_id, start_date, end_date, type_filter, is
         q = q.filter(Transaction.date >= start_date)
     if end_date is not None:
         q = q.filter(Transaction.date <= end_date)
+    if search:
+        q = q.filter(Transaction.description.ilike(f"%{search}%"))
     effective_income = is_income
     if type_filter == "income":
         effective_income = True
@@ -60,15 +72,17 @@ def list_transactions(
     end_date: Optional[date] = Query(None),
     is_income: Optional[bool] = Query(None),
     type: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=500),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    q = _build_query(db, current_user.id, category_id, start_date, end_date, type, is_income)
+    q = _build_query(db, current_user.id, category_id, start_date, end_date, type, is_income, search)
     total = q.count()
     txns = q.order_by(Transaction.date.desc(), Transaction.id.desc()).offset(skip).limit(limit).all()
-    return APIResponse(data=[_enrich(t, db) for t in txns], total=total)
+    party_cache: dict = {}
+    return APIResponse(data=[_enrich_party(t, db, party_cache) for t in txns], total=total)
 
 
 @router.get("/export")
@@ -78,10 +92,11 @@ def export_transactions(
     end_date: Optional[date] = Query(None),
     is_income: Optional[bool] = Query(None),
     type: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    q = _build_query(db, current_user.id, category_id, start_date, end_date, type, is_income)
+    q = _build_query(db, current_user.id, category_id, start_date, end_date, type, is_income, search)
     txns = q.order_by(Transaction.date.desc(), Transaction.id.desc()).all()
 
     party_cache: dict[int, str] = {}

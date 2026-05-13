@@ -101,6 +101,26 @@ export default function Dashboard() {
     fetchAll()
   }, [])
 
+  const now = new Date()
+  const curYear = now.getFullYear(), curMon = now.getMonth() + 1
+  const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  const prevYear = prevDate.getFullYear(), prevMon = prevDate.getMonth() + 1
+
+  const curMonthData = cashflow.find(m => m.year === curYear && m.month === curMon) || {}
+  const prevMonthData = cashflow.find(m => m.year === prevYear && m.month === prevMon) || {}
+
+  const curIncome = curMonthData.income_cents || 0
+  const curExpenses = curMonthData.expense_cents || 0
+  const curNet = curIncome - curExpenses
+  const prevIncome = prevMonthData.income_cents || 0
+  const prevExpenses = prevMonthData.expense_cents || 0
+  const prevNet = prevIncome - prevExpenses
+
+  const momPct = (cur, prev) => {
+    if (!prev) return null
+    return Math.round(((cur - prev) / prev) * 100)
+  }
+
   const totalIncome = cashflow.reduce((s, m) => s + (m.income_cents || 0), 0)
   const totalExpenses = cashflow.reduce((s, m) => s + (m.expense_cents || 0), 0)
   const netSavings = totalIncome - totalExpenses
@@ -131,6 +151,9 @@ export default function Dashboard() {
           <SkeletonBlock className="h-8 w-56 mb-2" />
           <SkeletonBlock className="h-4 w-80" />
         </div>
+        <div className="grid grid-cols-3 gap-4">
+          {[1, 2, 3].map((i) => <SkeletonBlock key={i} className="h-28" />)}
+        </div>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((i) => <SkeletonBlock key={i} className="h-32" />)}
         </div>
@@ -159,6 +182,40 @@ export default function Dashboard() {
           {greeting} <span>👋</span>
         </h1>
         <p className="text-sm mt-1" style={{ color: '#94a3b8' }}>{todayStr}</p>
+      </div>
+
+      {/* This Month summary */}
+      <div className="grid grid-cols-3 gap-4">
+        {[
+          { label: 'Income', cents: curIncome, prev: prevIncome, accent: '#22c55e', positive: true },
+          { label: 'Expenses', cents: curExpenses, prev: prevExpenses, accent: '#ef4444', positive: false },
+          { label: 'Net', cents: curNet, prev: prevNet, accent: curNet >= 0 ? '#6366f1' : '#f59e0b', positive: curNet >= 0 },
+        ].map(({ label, cents, prev, accent, positive }) => {
+          const pct = momPct(cents, prev)
+          const up = cents >= prev
+          return (
+            <div key={label} className="rounded-2xl border p-5 relative overflow-hidden"
+              style={{ backgroundColor:'#1e293b', borderColor:'#334155', borderTop:`3px solid ${accent}` }}>
+              <p className="text-xs font-medium uppercase tracking-wider mb-3" style={{ color:'#64748b' }}>
+                {label} · {MONTH_NAMES[curMon-1]}
+              </p>
+              <div className="text-2xl font-bold mb-2" style={{ color: label === 'Net' ? (cents >= 0 ? '#22c55e' : '#ef4444') : (label === 'Expenses' ? '#ef4444' : '#22c55e') }}>
+                <CurrencyAmount cents={label === 'Expenses' ? -cents : cents} />
+              </div>
+              {pct !== null ? (
+                <div className="flex items-center gap-1 text-xs font-medium" style={{ color: up ? '#22c55e' : '#ef4444' }}>
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d={up ? 'M5 10l7-7m0 0l7 7m-7-7v18' : 'M19 14l-7 7m0 0l-7-7m7 7V3'} />
+                  </svg>
+                  {Math.abs(pct)}% vs {MONTH_NAMES[prevMon-1]}
+                </div>
+              ) : (
+                <p className="text-xs" style={{ color:'#475569' }}>No prior month data</p>
+              )}
+            </div>
+          )
+        })}
       </div>
 
       {/* 4 KPI stat cards */}

@@ -494,7 +494,9 @@ export default function Transactions() {
   const [page, setPage] = useState(0)
   const limit = 20
 
-  const [filters, setFilters] = useState({ start:'', end:'', category_id:'', type:'all' })
+  const [filters, setFilters] = useState({ start:'', end:'', category_id:'', type:'all', search:'' })
+  const [searchValue, setSearchValue] = useState('')
+  const searchDebounceRef = useRef(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
   const [toast, setToast] = useState(null)
@@ -502,6 +504,16 @@ export default function Transactions() {
   const [exporting, setExporting] = useState(false)
 
   const showToast = (message, type='success') => setToast({ message, type })
+
+  const handleSearchChange = (e) => {
+    const val = e.target.value
+    setSearchValue(val)
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current)
+    searchDebounceRef.current = setTimeout(() => {
+      setFilters(f => ({ ...f, search: val }))
+      setPage(0)
+    }, 300)
+  }
 
   const fetchTransactions = useCallback(async () => {
     setLoading(true)
@@ -511,6 +523,7 @@ export default function Transactions() {
       if (filters.end) params.end_date = filters.end
       if (filters.category_id) params.category_id = filters.category_id
       if (filters.type !== 'all') params.type = filters.type
+      if (filters.search) params.search = filters.search
       const res = await getTransactions(params)
       const d = res.data
       setTransactions(d?.data || d?.items || d || [])
@@ -574,6 +587,7 @@ export default function Transactions() {
       if (filters.end) params.end_date = filters.end
       if (filters.category_id) params.category_id = filters.category_id
       if (filters.type !== 'all') params.type = filters.type
+      if (filters.search) params.search = filters.search
       const res = await exportTransactions(params)
       const url = URL.createObjectURL(new Blob([res.data], { type: 'text/csv' }))
       const a = document.createElement('a')
@@ -601,7 +615,7 @@ export default function Transactions() {
   }
 
   const totalPages = Math.ceil(total/limit)
-  const hasFilters = filters.start||filters.end||filters.category_id||filters.type!=='all'
+  const hasFilters = filters.start||filters.end||filters.category_id||filters.type!=='all'||filters.search
   const typeFilterStyle = (val) => ({
     backgroundColor: filters.type===val ? '#6366f1' : 'transparent',
     color: filters.type===val ? '#fff' : '#94a3b8',
@@ -659,6 +673,19 @@ export default function Transactions() {
 
       {/* Filter bar */}
       <div className="rounded-2xl border p-4 flex flex-wrap items-center gap-3" style={{ backgroundColor:'#1e293b', borderColor:'#334155' }}>
+        <div className="relative flex-1 min-w-[180px]">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color:'#64748b' }}>
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+          </svg>
+          <input
+            type="text"
+            placeholder="Search descriptions…"
+            className={`${ib} pl-9 w-full`}
+            style={is}
+            value={searchValue}
+            onChange={handleSearchChange}
+          />
+        </div>
         <div className="flex items-center gap-2">
           <label className="text-xs font-medium" style={{ color:'#64748b' }}>From</label>
           <input type="date" className={ib} style={is} value={filters.start} onChange={e => { setFilters({...filters, start:e.target.value}); setPage(0) }}/>
@@ -681,7 +708,7 @@ export default function Transactions() {
           ))}
         </div>
         {hasFilters && (
-          <button onClick={() => { setFilters({start:'',end:'',category_id:'',type:'all'}); setPage(0) }}
+          <button onClick={() => { setFilters({start:'',end:'',category_id:'',type:'all',search:''}); setSearchValue(''); setPage(0) }}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border transition-colors hover:bg-slate-700/50"
             style={{ borderColor:'#334155', color:'#94a3b8' }}>
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
