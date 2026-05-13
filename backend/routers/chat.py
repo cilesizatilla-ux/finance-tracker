@@ -17,5 +17,8 @@ def chat(
     current_user: User = Depends(get_current_user),
 ):
     history = [msg.model_dump() for msg in payload.history]
-    reply = advisor.run_advisor(payload.message, history, db, user_id=current_user.id)
+    try:
+        reply = advisor.run_advisor(payload.message, history, db, user_id=current_user.id)
+    except Exception as exc:
+        return APIResponse(error=f"AI advisor unavailable: {str(exc)}")
     return APIResponse(data={"reply": reply})

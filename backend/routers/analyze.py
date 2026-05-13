@@ -15,5 +15,8 @@ def analyze_finances(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    result = run_analysis(db, user_id=current_user.id)
+    try:
+        result = run_analysis(db, user_id=current_user.id)
+    except Exception as exc:
+        return APIResponse(error=f"Analysis failed: {str(exc)}")
     return APIResponse(data=result)
