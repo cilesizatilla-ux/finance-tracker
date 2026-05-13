@@ -1,0 +1,14 @@
+**/__pycache__
+**/*.pyc
+**/*.pyo
+.env
+.env.local
+frontend/.env.local
+venv/
+frontend/node_modules/
+frontend/dist/
+finance.db
+uploads/
+*.db
+.git/
+.gitignore

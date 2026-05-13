@@ -1,0 +1,42 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uvicorn *)",
+      "Bash(npm *)",
+      "Bash(pip *)",
+      "Bash(pip3 *)",
+      "Bash(python *)",
+      "Bash(python3 *)",
+      "Bash(alembic *)",
+      "Bash(vite *)",
+      "Bash(curl http://localhost*)",
+      "Bash(find /Users/atillacilesiz/Documents/finance-tracker *)",
+      "Read(/Users/atillacilesiz/Documents/finance-tracker/*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path // .tool_response.filePath // empty' | { read -r f && echo \"[finance-tracker] saved: $f\" >> /tmp/finance-tracker-saves.log; } 2>/dev/null || true",
+            "statusMessage": "Logging file save..."
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"systemMessage\": \"Finance Tracker session ended. Run: uvicorn backend.main:app --reload (backend) and npm run dev (frontend).\"}'",
+            "statusMessage": "Session ending..."
+          }
+        ]
+      }
+    ]
+  }
+}
