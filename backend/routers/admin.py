@@ -186,6 +186,7 @@ def list_users(
             "name": u.name,
             "created_at": u.created_at.isoformat(),
             "is_suspended": profile.is_suspended if profile else False,
+            "user_type": getattr(profile, "user_type", None) if profile else None,
             "transaction_count": stats.txn_count if stats else 0,
             "total_income_cents": stats.total_income if stats else 0,
             "total_expense_cents": stats.total_expense if stats else 0,
@@ -379,6 +380,27 @@ def delete_user(
     )
 
     return APIResponse(data={"deleted": True, "user_id": user_id})
+
+
+@router.post("/users/{user_id}/approve-admin")
+def approve_admin_role(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(require_super_admin),
+):
+    profile = db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="User profile not found")
+    if getattr(profile, "user_type", None) != "pending_admin":
+        raise HTTPException(status_code=400, detail="User is not pending admin approval")
+    profile.user_type = "admin"
+    db.commit()
+    _log_audit(
+        db, current_admin.id, "approve_admin_role",
+        target_type="user", target_id=user_id,
+        detail={"approved_by": current_admin.username},
+    )
+    return APIResponse(data={"user_id": user_id, "user_type": "admin"})
 
 
 # ---------------------------------------------------------------------------

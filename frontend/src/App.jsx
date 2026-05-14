@@ -1,7 +1,10 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
 import { GoogleOAuthProvider } from '@react-oauth/google'
 import { AuthProvider, useAuth } from './contexts/AuthContext.jsx'
 import { ToastProvider } from './contexts/ToastContext.jsx'
+import ProfileSetupModal from './components/ProfileSetupModal.jsx'
+import { getProfile } from './api/index.js'
 import Layout from './components/Layout.jsx'
 import Dashboard from './pages/Dashboard.jsx'
 import Transactions from './pages/Transactions.jsx'
@@ -37,6 +40,39 @@ function ProtectedRoute({ children }) {
   return user ? children : <Navigate to="/login" replace />
 }
 
+function ProfileSetupGate({ children }) {
+  const { user } = useAuth()
+  const [showSetup, setShowSetup] = useState(false)
+  const [profileChecked, setProfileChecked] = useState(false)
+
+  useEffect(() => {
+    if (!user) { setProfileChecked(true); return }
+    const key = `ft_profile_setup_${user.id}`
+    if (localStorage.getItem(key)) { setProfileChecked(true); return }
+    getProfile()
+      .then((res) => {
+        const profile = res.data?.data || res.data
+        if (!profile?.user_type) setShowSetup(true)
+        else localStorage.setItem(key, '1')
+      })
+      .catch(() => {})
+      .finally(() => setProfileChecked(true))
+  }, [user])
+
+  function handleComplete(role) {
+    if (user) localStorage.setItem(`ft_profile_setup_${user.id}`, '1')
+    setShowSetup(false)
+  }
+
+  if (!profileChecked) return null
+  return (
+    <>
+      {showSetup && <ProfileSetupModal onComplete={handleComplete} />}
+      {children}
+    </>
+  )
+}
+
 function AppRoutes() {
   const { user } = useAuth()
   return (
@@ -52,7 +88,9 @@ function AppRoutes() {
         path="/"
         element={
           <ProtectedRoute>
-            <Layout />
+            <ProfileSetupGate>
+              <Layout />
+            </ProfileSetupGate>
           </ProtectedRoute>
         }
       >

@@ -124,6 +124,37 @@ def on_startup():
             conn.execute(text("ALTER TABLE users ADD COLUMN last_active_at DATETIME"))
             conn.commit()
 
+        # Migrations for audit_entries table
+        audit_entry_cols = [row[1] for row in conn.execute(text("PRAGMA table_info(audit_entries)"))]
+        if "factory_name" not in audit_entry_cols:
+            conn.execute(text("ALTER TABLE audit_entries ADD COLUMN factory_name VARCHAR"))
+            conn.commit()
+        if "duration_days" in audit_entry_cols:
+            # Rename old integer column by recreating with REAL type is not directly possible in SQLite,
+            # but since column already exists we just leave it (SQLite will coerce int to float reads fine).
+            pass
+
+        # Migrations for audit_assignments table
+        audit_assign_cols = [row[1] for row in conn.execute(text("PRAGMA table_info(audit_assignments)"))]
+        if "auditor_name" not in audit_assign_cols:
+            conn.execute(text("ALTER TABLE audit_assignments ADD COLUMN auditor_name VARCHAR"))
+            conn.commit()
+        if "auditor_email" not in audit_assign_cols:
+            conn.execute(text("ALTER TABLE audit_assignments ADD COLUMN auditor_email VARCHAR"))
+            conn.commit()
+        if "notify_sent" not in audit_assign_cols:
+            conn.execute(text("ALTER TABLE audit_assignments ADD COLUMN notify_sent BOOLEAN NOT NULL DEFAULT 0"))
+            conn.commit()
+        if "approval_requested" not in audit_assign_cols:
+            conn.execute(text("ALTER TABLE audit_assignments ADD COLUMN approval_requested BOOLEAN NOT NULL DEFAULT 0"))
+            conn.commit()
+
+        # Migrations for user_profiles table
+        profile_cols = [row[1] for row in conn.execute(text("PRAGMA table_info(user_profiles)"))]
+        if "user_type" not in profile_cols:
+            conn.execute(text("ALTER TABLE user_profiles ADD COLUMN user_type VARCHAR"))
+            conn.commit()
+
     db = SessionLocal()
     try:
         # Seed expense categories if none exist

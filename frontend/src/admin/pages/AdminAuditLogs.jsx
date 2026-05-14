@@ -17,7 +17,148 @@ function actionColor(action) {
   return { bg: '#6366f120', color: '#818cf8' }
 }
 
-export default function AdminAuditLogs() {
+function DirectoryCard({ title, count, columns, rows, renderRow }) {
+  return (
+    <div className="rounded-xl ring-1 ring-slate-700/50 overflow-hidden" style={{ backgroundColor: '#1e293b' }}>
+      <div className="flex items-center gap-3 px-4 py-3 border-b" style={{ borderColor: '#334155' }}>
+        <h3 className="text-sm font-semibold text-white">{title}</h3>
+        <span
+          className="px-2 py-0.5 rounded-full text-[11px] font-semibold"
+          style={{ backgroundColor: '#6366f120', color: '#818cf8' }}
+        >
+          {count}
+        </span>
+      </div>
+      {rows.length === 0 ? (
+        <p className="px-4 py-6 text-sm text-center" style={{ color: '#64748b' }}>No records yet</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b" style={{ borderColor: '#334155' }}>
+                {columns.map((col) => (
+                  <th key={col} className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#64748b' }}>
+                    {col}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-700/50">
+              {rows.map((row, i) => renderRow(row, i))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function AuditDirectory() {
+  const [directory, setDirectory] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    setLoading(true)
+    setError(null)
+    adminApi.get('/audit/directory')
+      .then((res) => setDirectory(res.data?.data ?? res.data))
+      .catch(() => setError('Failed to load audit directory.'))
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
+
+  if (error) {
+    return <div className="rounded-xl p-4 border border-red-500/30 bg-red-500/10 text-red-400 text-sm">{error}</div>
+  }
+
+  const customers    = directory?.customers    || []
+  const factories    = (directory?.factories   || []).filter((f) => f && (f.name || f.id))
+  const auditors     = directory?.auditors     || []
+  const leadAuditors = directory?.lead_auditors || []
+  const observers    = directory?.observers    || []
+
+  return (
+    <div className="space-y-4">
+      <DirectoryCard
+        title="Customers"
+        count={customers.length}
+        columns={['Name', 'Audits']}
+        rows={customers}
+        renderRow={(row, i) => (
+          <tr key={row.id ?? i} className="hover:bg-slate-800/40 transition-colors">
+            <td className="px-4 py-2.5 font-medium text-white text-xs">{row.name || '—'}</td>
+            <td className="px-4 py-2.5 text-xs" style={{ color: '#94a3b8' }}>{row.audits ?? row.audit_count ?? '—'}</td>
+          </tr>
+        )}
+      />
+
+      <DirectoryCard
+        title="Factories"
+        count={factories.length}
+        columns={['Name', 'Audits']}
+        rows={factories}
+        renderRow={(row, i) => (
+          <tr key={row.id ?? i} className="hover:bg-slate-800/40 transition-colors">
+            <td className="px-4 py-2.5 font-medium text-white text-xs">{row.name || '—'}</td>
+            <td className="px-4 py-2.5 text-xs" style={{ color: '#94a3b8' }}>{row.audits ?? row.audit_count ?? '—'}</td>
+          </tr>
+        )}
+      />
+
+      <DirectoryCard
+        title="Auditors"
+        count={auditors.length}
+        columns={['Name', 'Email', 'Audits']}
+        rows={auditors}
+        renderRow={(row, i) => (
+          <tr key={row.id ?? i} className="hover:bg-slate-800/40 transition-colors">
+            <td className="px-4 py-2.5 font-medium text-white text-xs">{row.name || '—'}</td>
+            <td className="px-4 py-2.5 text-xs" style={{ color: '#64748b' }}>{row.email || '—'}</td>
+            <td className="px-4 py-2.5 text-xs" style={{ color: '#94a3b8' }}>{row.audits ?? row.audit_count ?? '—'}</td>
+          </tr>
+        )}
+      />
+
+      <DirectoryCard
+        title="Lead Auditors"
+        count={leadAuditors.length}
+        columns={['Name', 'Email', 'Audits']}
+        rows={leadAuditors}
+        renderRow={(row, i) => (
+          <tr key={row.id ?? i} className="hover:bg-slate-800/40 transition-colors">
+            <td className="px-4 py-2.5 font-medium text-white text-xs">{row.name || '—'}</td>
+            <td className="px-4 py-2.5 text-xs" style={{ color: '#64748b' }}>{row.email || '—'}</td>
+            <td className="px-4 py-2.5 text-xs" style={{ color: '#94a3b8' }}>{row.audits ?? row.audit_count ?? '—'}</td>
+          </tr>
+        )}
+      />
+
+      <DirectoryCard
+        title="Observers"
+        count={observers.length}
+        columns={['Name', 'Email', 'Audits']}
+        rows={observers}
+        renderRow={(row, i) => (
+          <tr key={row.id ?? i} className="hover:bg-slate-800/40 transition-colors">
+            <td className="px-4 py-2.5 font-medium text-white text-xs">{row.name || '—'}</td>
+            <td className="px-4 py-2.5 text-xs" style={{ color: '#64748b' }}>{row.email || '—'}</td>
+            <td className="px-4 py-2.5 text-xs" style={{ color: '#94a3b8' }}>{row.audits ?? row.audit_count ?? '—'}</td>
+          </tr>
+        )}
+      />
+    </div>
+  )
+}
+
+function AdminLogs() {
   const [logs, setLogs] = useState([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(0)
@@ -51,11 +192,8 @@ export default function AdminAuditLogs() {
   }
 
   return (
-    <div className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Audit Logs</h1>
-        <p className="text-sm mt-1" style={{ color: '#94a3b8' }}>{total.toLocaleString()} total entries</p>
-      </div>
+    <div className="space-y-4">
+      <p className="text-sm" style={{ color: '#94a3b8' }}>{total.toLocaleString()} total entries</p>
 
       {error && (
         <div className="rounded-xl p-4 border border-red-500/30 bg-red-500/10 text-red-400 text-sm">{error}</div>
@@ -176,6 +314,41 @@ export default function AdminAuditLogs() {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+const TABS = ['Admin Logs', 'Audit Directory']
+
+export default function AdminAuditLogs() {
+  const [activeTab, setActiveTab] = useState('Admin Logs')
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h1 className="text-2xl font-bold text-white">Audit Logs</h1>
+      </div>
+
+      {/* Tab switcher */}
+      <div className="flex gap-1 p-1 rounded-xl w-fit" style={{ backgroundColor: '#0f172a' }}>
+        {TABS.map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className="px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            style={
+              activeTab === tab
+                ? { backgroundColor: '#1e293b', color: '#f1f5f9' }
+                : { backgroundColor: 'transparent', color: '#64748b' }
+            }
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'Admin Logs' && <AdminLogs />}
+      {activeTab === 'Audit Directory' && <AuditDirectory />}
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import {
   adminGetAuditEntries,
   adminCreateAuditEntry,
@@ -10,6 +10,7 @@ import {
   adminReviewExpense,
   adminListUsers,
 } from '../../api/index.js'
+import adminApi from '../adminApi.js'
 import { useToast } from '../../contexts/ToastContext.jsx'
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -39,6 +40,26 @@ const STATUS_BADGE_STYLES = {
   rejected:    { bg: '#ef444420', border: '#ef444450', text: '#fca5a5' },
 }
 
+// Role badge colors (Change 3)
+const ROLE_BADGE_STYLES = {
+  auditor:  { bg: '#3b82f620', border: '#3b82f650', text: '#93c5fd' },
+  lead:     { bg: '#f59e0b20', border: '#f59e0b50', text: '#fbbf24' },
+  reviewer: { bg: '#22c55e20', border: '#22c55e50', text: '#4ade80' },
+  observer: { bg: '#8b5cf620', border: '#8b5cf650', text: '#c4b5fd' },
+}
+
+function RoleBadge({ role }) {
+  const s = ROLE_BADGE_STYLES[role] || ROLE_BADGE_STYLES.auditor
+  return (
+    <span
+      className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold capitalize"
+      style={{ backgroundColor: s.bg, border: `1px solid ${s.border}`, color: s.text }}
+    >
+      {role}
+    </span>
+  )
+}
+
 function StatusBadge({ status }) {
   const s = STATUS_BADGE_STYLES[status] || STATUS_BADGE_STYLES.pending
   return (
@@ -55,6 +76,157 @@ function Spinner() {
   return (
     <div className="flex items-center justify-center py-16">
       <div className="w-8 h-8 border-2 border-slate-600 border-t-indigo-500 rounded-full animate-spin" />
+    </div>
+  )
+}
+
+// ─── localStorage helper for auditor memory (Change 4) ───────────────────────
+
+const LS_KEY = 'ft_audit_auditors'
+const MAX_SAVED = 10
+
+function getSavedAuditors() {
+  try {
+    return JSON.parse(localStorage.getItem(LS_KEY) || '[]')
+  } catch {
+    return []
+  }
+}
+
+function saveAuditorToMemory(name, email) {
+  if (!name && !email) return
+  const existing = getSavedAuditors()
+  const filtered = existing.filter(
+    a => !(a.name === name && a.email === email)
+  )
+  const updated = [{ name, email }, ...filtered].slice(0, MAX_SAVED)
+  localStorage.setItem(LS_KEY, JSON.stringify(updated))
+}
+
+// ─── Post-scheduling notification modal (Change 5) ───────────────────────────
+
+function NotifyModal({ entryId, assignments, onClose, toast }) {
+  const [step, setStep] = useState(1)
+  const [checked, setChecked] = useState(
+    () => Object.fromEntries(assignments.map(a => [a.user_id ?? a.auditor_email ?? a.id, true]))
+  )
+  const [sending, setSending] = useState(false)
+
+  const getKey = (a) => a.user_id ?? a.auditor_email ?? a.id
+
+  const handleSendNotifications = async () => {
+    setSending(true)
+    try {
+      const assignmentIds = assignments
+        .filter(a => checked[getKey(a)])
+        .map(a => a.id)
+        .filter(Boolean)
+      await adminApi.post(`/admin/audit/entries/${entryId}/notify`, { assignment_ids: assignmentIds })
+      toast.success('Notifications sent')
+    } catch {
+      toast.error('Failed to send notifications')
+    } finally {
+      setSending(false)
+      setStep(2)
+    }
+  }
+
+  const handleRequestApproval = async () => {
+    setSending(true)
+    try {
+      await adminApi.post(`/admin/audit/entries/${entryId}/request-approval`, {})
+      toast.success('Approval request sent')
+    } catch {
+      toast.error('Failed to send approval request')
+    } finally {
+      setSending(false)
+      onClose()
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+      style={{ backgroundColor: 'rgba(0,0,0,0.75)' }}
+    >
+      <div
+        className="w-full max-w-md rounded-2xl shadow-2xl"
+        style={{ backgroundColor: '#1e293b', border: '1px solid #334155' }}
+      >
+        {step === 1 ? (
+          <>
+            <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: '#334155' }}>
+              <h2 className="text-base font-semibold text-white">Notify Auditors?</h2>
+              <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors text-lg leading-none">&times;</button>
+            </div>
+            <div className="px-6 py-5 space-y-3">
+              {assignments.length === 0 ? (
+                <p className="text-sm text-slate-400">No auditors assigned to this entry.</p>
+              ) : (
+                assignments.map(a => {
+                  const key = getKey(a)
+                  const name = a.user_name || a.auditor_name || a.user_email || a.auditor_email || `User #${a.user_id}`
+                  const email = a.user_email || a.auditor_email || ''
+                  return (
+                    <label key={key} className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={!!checked[key]}
+                        onChange={e => setChecked(c => ({ ...c, [key]: e.target.checked }))}
+                        className="w-4 h-4 rounded accent-indigo-500"
+                      />
+                      <div>
+                        <p className="text-sm text-white">{name}</p>
+                        {email && <p className="text-xs text-slate-400">{email}</p>}
+                      </div>
+                    </label>
+                  )
+                })
+              )}
+            </div>
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t" style={{ borderColor: '#334155' }}>
+              <button
+                onClick={() => setStep(2)}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-700 transition-colors"
+              >
+                Skip
+              </button>
+              <button
+                onClick={handleSendNotifications}
+                disabled={sending}
+                className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 transition-colors disabled:opacity-50"
+              >
+                {sending ? 'Sending...' : 'Send Notifications'}
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: '#334155' }}>
+              <h2 className="text-base font-semibold text-white">Request Approval?</h2>
+              <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors text-lg leading-none">&times;</button>
+            </div>
+            <div className="px-6 py-5">
+              <p className="text-sm text-slate-300">Send an approval request to assigned auditors?</p>
+            </div>
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t" style={{ borderColor: '#334155' }}>
+              <button
+                onClick={onClose}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-700 transition-colors"
+              >
+                Skip
+              </button>
+              <button
+                onClick={handleRequestApproval}
+                disabled={sending}
+                className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 transition-colors disabled:opacity-50"
+              >
+                {sending ? 'Requesting...' : 'Request Approval'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   )
 }
@@ -81,11 +253,19 @@ function buildAuditsByDay(entries, year, month) {
 const EMPTY_FORM = {
   client_name: '',
   company_name: '',
+  factory_name: '',
   audit_date: '',
   duration_days: 1,
   location: '',
   status: 'scheduled',
   notes: '',
+}
+
+// ─── Duration display helper ─────────────────────────────────────────────────
+function formatDuration(val) {
+  const n = parseFloat(val)
+  if (isNaN(n)) return '1'
+  return n % 1 === 0 ? String(n) : n.toFixed(1)
 }
 
 function AuditModal({ entry, onClose, onSaved, toast }) {
@@ -96,6 +276,7 @@ function AuditModal({ entry, onClose, onSaved, toast }) {
       : {
           client_name:   entry.client_name   || '',
           company_name:  entry.company_name  || '',
+          factory_name:  entry.factory_name  || '',
           audit_date:    entry.audit_date     || '',
           duration_days: entry.duration_days  || 1,
           location:      entry.location       || '',
@@ -113,7 +294,27 @@ function AuditModal({ entry, onClose, onSaved, toast }) {
   const [assigningId, setAssigningId]   = useState(null)
   const [unassigningId, setUnassigningId] = useState(null)
 
+  // External auditor state (Change 4)
+  const [extName, setExtName]   = useState('')
+  const [extEmail, setExtEmail] = useState('')
+  const [extRole, setExtRole]   = useState('auditor')
+  const [extAdding, setExtAdding] = useState(false)
+  const [savedAuditors, setSavedAuditors] = useState(getSavedAuditors)
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const extNameRef = useRef(null)
+
+  // Notify modal state (Change 5)
+  const [showNotify, setShowNotify] = useState(false)
+  const [newEntryId, setNewEntryId] = useState(null)
+
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  // Duration step helpers (Change 1)
+  const stepDuration = (delta) => {
+    const current = parseFloat(form.duration_days) || 0.5
+    const next = Math.max(0.5, Math.round((current + delta) * 2) / 2)
+    set('duration_days', next)
+  }
 
   // Search users
   useEffect(() => {
@@ -121,7 +322,6 @@ function AuditModal({ entry, onClose, onSaved, toast }) {
     const t = setTimeout(async () => {
       setUserLoading(true)
       try {
-        // GET /admin/users returns APIResponse: { data: [...], total: N }
         const res = await adminListUsers({ search: userSearch, per_page: 10 })
         setUserResults(res.data?.data || res.data || [])
       } catch {
@@ -136,9 +336,7 @@ function AuditModal({ entry, onClose, onSaved, toast }) {
   const handleAssign = async (user) => {
     setAssigningId(user.id)
     try {
-      // POST /admin/audit/entries/:id/assign returns {ok, updated} — no assignments list
       await adminAssignAuditor(entry.id, { user_id: user.id, role: 'auditor' })
-      // Append a locally-constructed assignment using the flat shape the backend uses
       setAssignments(prev => {
         if (prev.some(a => a.user_id === user.id)) return prev
         return [...prev, { user_id: user.id, role: 'auditor', user_name: user.name || null, user_email: user.email || null }]
@@ -157,7 +355,6 @@ function AuditModal({ entry, onClose, onSaved, toast }) {
     setUnassigningId(userId)
     try {
       await adminUnassignAuditor(entry.id, userId)
-      // Backend serializes assignments with flat user_id field
       setAssignments(a => a.filter(x => x.user_id !== userId))
       toast.success('Auditor removed')
     } catch {
@@ -170,12 +367,58 @@ function AuditModal({ entry, onClose, onSaved, toast }) {
   const handleChangeRole = async (userId, role) => {
     try {
       await adminAssignAuditor(entry.id, { user_id: userId, role })
-      // Update role locally; backend serializes assignments with flat user_id
       setAssignments(a => a.map(x => x.user_id === userId ? { ...x, role } : x))
     } catch {
       toast.error('Failed to update role')
     }
   }
+
+  // External auditor add (Change 4)
+  const handleAddExternalAuditor = async () => {
+    if (!extName.trim() && !extEmail.trim()) {
+      toast.error('Please enter a name or email for the external auditor')
+      return
+    }
+    setExtAdding(true)
+    try {
+      await adminApi.post(`/audit/entries/${entry.id}/assign`, {
+        auditor_name: extName.trim() || undefined,
+        auditor_email: extEmail.trim() || undefined,
+        role: extRole,
+      })
+      const newAuditor = {
+        user_id: null,
+        auditor_name: extName.trim(),
+        auditor_email: extEmail.trim(),
+        role: extRole,
+        _ext: true,
+      }
+      setAssignments(prev => [...prev, newAuditor])
+      saveAuditorToMemory(extName.trim(), extEmail.trim())
+      setSavedAuditors(getSavedAuditors())
+      setExtName('')
+      setExtEmail('')
+      setExtRole('auditor')
+      toast.success('External auditor added')
+    } catch {
+      toast.error('Failed to add external auditor')
+    } finally {
+      setExtAdding(false)
+    }
+  }
+
+  const handleSuggestionSelect = (auditor) => {
+    setExtName(auditor.name || '')
+    setExtEmail(auditor.email || '')
+    setShowSuggestions(false)
+  }
+
+  const filteredSuggestions = savedAuditors.filter(a =>
+    extName.trim()
+      ? (a.name || '').toLowerCase().includes(extName.toLowerCase()) ||
+        (a.email || '').toLowerCase().includes(extName.toLowerCase())
+      : true
+  )
 
   const handleSave = async () => {
     if (!form.client_name.trim() || !form.company_name.trim() || !form.audit_date) {
@@ -185,13 +428,21 @@ function AuditModal({ entry, onClose, onSaved, toast }) {
     setSaving(true)
     try {
       if (isNew) {
-        await adminCreateAuditEntry(form)
+        const res = await adminCreateAuditEntry(form)
         toast.success('Audit entry created')
+        // Extract new entry id for notify modal (Change 5)
+        const createdId = res.data?.id || res.data?.entry?.id || null
+        if (createdId) {
+          setNewEntryId(createdId)
+          setShowNotify(true)
+          return // keep modal open for notify flow; onSaved called after notify closes
+        }
+        onSaved()
       } else {
         await adminUpdateAuditEntry(entry.id, form)
         toast.success('Audit entry updated')
+        onSaved()
       }
-      onSaved()
     } catch {
       toast.error('Failed to save audit entry')
     } finally {
@@ -214,240 +465,373 @@ function AuditModal({ entry, onClose, onSaved, toast }) {
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
-    >
+    <>
       <div
-        className="w-full max-w-lg rounded-2xl shadow-2xl overflow-y-auto"
-        style={{ backgroundColor: '#1e293b', border: '1px solid #334155', maxHeight: '90vh' }}
+        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}
+        onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: '#334155' }}>
-          <h2 className="text-base font-semibold text-white">{isNew ? 'Add New Audit' : 'Edit Audit'}</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors text-lg leading-none">&times;</button>
-        </div>
-
-        {/* Body */}
-        <div className="px-6 py-5 space-y-4">
-          {/* Client Name */}
-          <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1">Client Name *</label>
-            <input
-              type="text"
-              value={form.client_name}
-              onChange={e => set('client_name', e.target.value)}
-              className="w-full rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-              style={{ backgroundColor: '#0f172a', border: '1px solid #334155' }}
-              placeholder="Jane Smith"
-            />
+        <div
+          className="w-full max-w-lg rounded-2xl shadow-2xl overflow-y-auto"
+          style={{ backgroundColor: '#1e293b', border: '1px solid #334155', maxHeight: '90vh' }}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: '#334155' }}>
+            <h2 className="text-base font-semibold text-white">{isNew ? 'Add New Audit' : 'Edit Audit'}</h2>
+            <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors text-lg leading-none">&times;</button>
           </div>
 
-          {/* Company Name */}
-          <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1">Company Name *</label>
-            <input
-              type="text"
-              value={form.company_name}
-              onChange={e => set('company_name', e.target.value)}
-              className="w-full rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-              style={{ backgroundColor: '#0f172a', border: '1px solid #334155' }}
-              placeholder="Acme Corp"
-            />
-          </div>
-
-          {/* Start Date + Duration */}
-          <div className="grid grid-cols-2 gap-3">
+          {/* Body */}
+          <div className="px-6 py-5 space-y-4">
+            {/* Client Name */}
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1">Start Date *</label>
+              <label className="block text-xs font-medium text-slate-400 mb-1">Client Name *</label>
               <input
-                type="date"
-                value={form.audit_date}
-                onChange={e => set('audit_date', e.target.value)}
-                className="w-full rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                style={{ backgroundColor: '#0f172a', border: '1px solid #334155', colorScheme: 'dark' }}
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1">Duration (days)</label>
-              <input
-                type="number"
-                min={1}
-                value={form.duration_days}
-                onChange={e => set('duration_days', Math.max(1, parseInt(e.target.value) || 1))}
-                className="w-full rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                type="text"
+                value={form.client_name}
+                onChange={e => set('client_name', e.target.value)}
+                className="w-full rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 style={{ backgroundColor: '#0f172a', border: '1px solid #334155' }}
+                placeholder="Jane Smith"
               />
             </div>
-          </div>
 
-          {/* Location */}
-          <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1">Location</label>
-            <input
-              type="text"
-              value={form.location}
-              onChange={e => set('location', e.target.value)}
-              className="w-full rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-              style={{ backgroundColor: '#0f172a', border: '1px solid #334155' }}
-              placeholder="New York, NY"
-            />
-          </div>
+            {/* Company Name */}
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1">Company Name *</label>
+              <input
+                type="text"
+                value={form.company_name}
+                onChange={e => set('company_name', e.target.value)}
+                className="w-full rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                style={{ backgroundColor: '#0f172a', border: '1px solid #334155' }}
+                placeholder="Acme Corp"
+              />
+            </div>
 
-          {/* Status */}
-          <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1">Status</label>
-            <select
-              value={form.status}
-              onChange={e => set('status', e.target.value)}
-              className="w-full rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
-              style={{ backgroundColor: '#0f172a', border: '1px solid #334155' }}
-            >
-              <option value="scheduled">Scheduled</option>
-              <option value="in_progress">In Progress</option>
-              <option value="completed">Completed</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-          </div>
+            {/* Factory Name (Change 2) */}
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1">Factory Name</label>
+              <input
+                type="text"
+                value={form.factory_name}
+                onChange={e => set('factory_name', e.target.value)}
+                className="w-full rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                style={{ backgroundColor: '#0f172a', border: '1px solid #334155' }}
+                placeholder="e.g. Main Production Facility"
+              />
+            </div>
 
-          {/* Notes */}
-          <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1">Notes</label>
-            <textarea
-              value={form.notes}
-              onChange={e => set('notes', e.target.value)}
-              rows={3}
-              className="w-full rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none"
-              style={{ backgroundColor: '#0f172a', border: '1px solid #334155' }}
-              placeholder="Optional notes..."
-            />
-          </div>
-
-          {/* Assign Auditors — only for existing entries */}
-          {!isNew && (
-            <div className="pt-2 border-t" style={{ borderColor: '#334155' }}>
-              <p className="text-xs font-semibold text-slate-300 mb-3">Assigned Auditors</p>
-
-              {/* Current assignments */}
-              {assignments.length > 0 ? (
-                <div className="space-y-2 mb-3">
-                  {assignments.map(a => {
-                    // Backend serializes assignments with flat user_id, user_name, user_email
-                    const uid = a.user_id
-                    const name = a.user_name || a.user_email || `User #${uid}`
-                    return (
-                      <div
-                        key={uid}
-                        className="flex items-center justify-between gap-2 rounded-lg px-3 py-2"
-                        style={{ backgroundColor: '#0f172a', border: '1px solid #334155' }}
-                      >
-                        <span className="text-sm text-white truncate">{name}</span>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          <select
-                            value={a.role || 'auditor'}
-                            onChange={e => handleChangeRole(uid, e.target.value)}
-                            className="rounded px-2 py-0.5 text-xs text-white focus:outline-none"
-                            style={{ backgroundColor: '#1e293b', border: '1px solid #334155' }}
-                          >
-                            <option value="auditor">Auditor</option>
-                            <option value="lead">Lead</option>
-                            <option value="reviewer">Reviewer</option>
-                          </select>
-                          <button
-                            onClick={() => handleUnassign(uid)}
-                            disabled={unassigningId === uid}
-                            className="text-slate-500 hover:text-red-400 transition-colors text-base leading-none"
-                            title="Remove"
-                          >
-                            &times;
-                          </button>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              ) : (
-                <p className="text-xs text-slate-500 mb-3">No auditors assigned yet.</p>
-              )}
-
-              {/* User search */}
-              <div className="relative">
+            {/* Start Date + Duration (Change 1) */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">Start Date *</label>
                 <input
-                  type="text"
-                  value={userSearch}
-                  onChange={e => setUserSearch(e.target.value)}
-                  className="w-full rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                  style={{ backgroundColor: '#0f172a', border: '1px solid #334155' }}
-                  placeholder="Search users to add..."
+                  type="date"
+                  value={form.audit_date}
+                  onChange={e => set('audit_date', e.target.value)}
+                  className="w-full rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  style={{ backgroundColor: '#0f172a', border: '1px solid #334155', colorScheme: 'dark' }}
                 />
-                {userLoading && (
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                    <div className="w-4 h-4 border border-slate-600 border-t-indigo-500 rounded-full animate-spin" />
-                  </div>
-                )}
-                {userResults.length > 0 && (
-                  <div
-                    className="absolute z-10 w-full mt-1 rounded-lg shadow-xl overflow-hidden"
-                    style={{ backgroundColor: '#1e293b', border: '1px solid #334155' }}
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">Duration (days)</label>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => stepDuration(-0.5)}
+                    className="w-7 h-8 flex items-center justify-center rounded-l-lg text-slate-300 hover:text-white hover:bg-slate-600 transition-colors text-sm font-bold flex-shrink-0"
+                    style={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRight: 'none' }}
+                    title="Decrease by 0.5"
                   >
-                    {userResults.map(u => (
-                      <button
-                        key={u.id}
-                        onClick={() => handleAssign(u)}
-                        disabled={assigningId === u.id || assignments.some(a => a.user_id === u.id)}
-                        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-slate-700 transition-colors text-left disabled:opacity-40"
-                      >
-                        <div className="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-xs text-white font-semibold flex-shrink-0">
-                          {(u.name || u.email || '?')[0].toUpperCase()}
-                        </div>
-                        <div>
-                          <p className="text-sm text-white">{u.name || '—'}</p>
-                          <p className="text-xs text-slate-400">{u.email}</p>
-                        </div>
-                        {assignments.some(a => a.user_id === u.id) && (
-                          <span className="ml-auto text-xs text-emerald-400">Added</span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                    −
+                  </button>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="0.5"
+                    value={form.duration_days}
+                    onChange={e => {
+                      const v = parseFloat(e.target.value)
+                      if (!isNaN(v) && v >= 0.5) set('duration_days', Math.round(v * 2) / 2)
+                    }}
+                    className="flex-1 min-w-0 px-2 py-2 text-sm text-white text-center focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    style={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderLeft: 'none', borderRight: 'none' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => stepDuration(0.5)}
+                    className="w-7 h-8 flex items-center justify-center rounded-r-lg text-slate-300 hover:text-white hover:bg-slate-600 transition-colors text-sm font-bold flex-shrink-0"
+                    style={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderLeft: 'none' }}
+                    title="Increase by 0.5"
+                  >
+                    +
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  {formatDuration(form.duration_days)} {parseFloat(form.duration_days) === 1 ? 'day' : 'days'}
+                </p>
               </div>
             </div>
-          )}
-        </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t" style={{ borderColor: '#334155' }}>
-          <div>
-            {!isNew && (
-              <button
-                onClick={handleDelete}
-                disabled={saving}
-                className="px-4 py-2 rounded-lg text-sm font-medium text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+            {/* Location */}
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1">Location</label>
+              <input
+                type="text"
+                value={form.location}
+                onChange={e => set('location', e.target.value)}
+                className="w-full rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                style={{ backgroundColor: '#0f172a', border: '1px solid #334155' }}
+                placeholder="New York, NY"
+              />
+            </div>
+
+            {/* Status */}
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1">Status</label>
+              <select
+                value={form.status}
+                onChange={e => set('status', e.target.value)}
+                className="w-full rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                style={{ backgroundColor: '#0f172a', border: '1px solid #334155' }}
               >
-                Delete
-              </button>
+                <option value="scheduled">Scheduled</option>
+                <option value="in_progress">In Progress</option>
+                <option value="completed">Completed</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+            </div>
+
+            {/* Notes */}
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1">Notes</label>
+              <textarea
+                value={form.notes}
+                onChange={e => set('notes', e.target.value)}
+                rows={3}
+                className="w-full rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none"
+                style={{ backgroundColor: '#0f172a', border: '1px solid #334155' }}
+                placeholder="Optional notes..."
+              />
+            </div>
+
+            {/* Assign Auditors — only for existing entries */}
+            {!isNew && (
+              <div className="pt-2 border-t" style={{ borderColor: '#334155' }}>
+                <p className="text-xs font-semibold text-slate-300 mb-3">Assigned Auditors</p>
+
+                {/* Current assignments */}
+                {assignments.length > 0 ? (
+                  <div className="space-y-2 mb-3">
+                    {assignments.map((a, idx) => {
+                      const uid = a.user_id
+                      const isExt = a._ext || !uid
+                      const name = a.user_name || a.auditor_name || a.user_email || a.auditor_email || (uid ? `User #${uid}` : 'External')
+                      const email = a.user_email || a.auditor_email || ''
+                      const key = uid ?? a.auditor_email ?? idx
+                      return (
+                        <div
+                          key={key}
+                          className="flex items-center justify-between gap-2 rounded-lg px-3 py-2"
+                          style={{ backgroundColor: '#0f172a', border: '1px solid #334155' }}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-sm text-white truncate">{name}</span>
+                            {email && email !== name && (
+                              <span className="text-xs text-slate-500 truncate hidden sm:inline">{email}</span>
+                            )}
+                            {isExt && (
+                              <span className="text-[10px] text-violet-400 flex-shrink-0">ext</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <RoleBadge role={a.role || 'auditor'} />
+                            <select
+                              value={a.role || 'auditor'}
+                              onChange={e => uid ? handleChangeRole(uid, e.target.value) : null}
+                              disabled={!uid}
+                              className="rounded px-2 py-0.5 text-xs text-white focus:outline-none disabled:opacity-50"
+                              style={{ backgroundColor: '#1e293b', border: '1px solid #334155' }}
+                            >
+                              <option value="auditor">Auditor</option>
+                              <option value="lead">Lead</option>
+                              <option value="reviewer">Reviewer</option>
+                              <option value="observer">Observer</option>
+                            </select>
+                            {uid && (
+                              <button
+                                onClick={() => handleUnassign(uid)}
+                                disabled={unassigningId === uid}
+                                className="text-slate-500 hover:text-red-400 transition-colors text-base leading-none"
+                                title="Remove"
+                              >
+                                &times;
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-500 mb-3">No auditors assigned yet.</p>
+                )}
+
+                {/* User search — From Users */}
+                <p className="text-[11px] font-semibold text-slate-400 mb-1 uppercase tracking-wider">From Users</p>
+                <div className="relative mb-4">
+                  <input
+                    type="text"
+                    value={userSearch}
+                    onChange={e => setUserSearch(e.target.value)}
+                    className="w-full rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    style={{ backgroundColor: '#0f172a', border: '1px solid #334155' }}
+                    placeholder="Search users to add..."
+                  />
+                  {userLoading && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      <div className="w-4 h-4 border border-slate-600 border-t-indigo-500 rounded-full animate-spin" />
+                    </div>
+                  )}
+                  {userResults.length > 0 && (
+                    <div
+                      className="absolute z-10 w-full mt-1 rounded-lg shadow-xl overflow-hidden"
+                      style={{ backgroundColor: '#1e293b', border: '1px solid #334155' }}
+                    >
+                      {userResults.map(u => (
+                        <button
+                          key={u.id}
+                          onClick={() => handleAssign(u)}
+                          disabled={assigningId === u.id || assignments.some(a => a.user_id === u.id)}
+                          className="w-full flex items-center gap-3 px-3 py-2 hover:bg-slate-700 transition-colors text-left disabled:opacity-40"
+                        >
+                          <div className="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-xs text-white font-semibold flex-shrink-0">
+                            {(u.name || u.email || '?')[0].toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="text-sm text-white">{u.name || '—'}</p>
+                            <p className="text-xs text-slate-400">{u.email}</p>
+                          </div>
+                          {assignments.some(a => a.user_id === u.id) && (
+                            <span className="ml-auto text-xs text-emerald-400">Added</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* External Auditor section (Change 4) */}
+                <p className="text-[11px] font-semibold text-slate-400 mb-2 uppercase tracking-wider">External Auditor</p>
+                <div className="flex items-start gap-2 flex-wrap">
+                  {/* Name input with suggestions */}
+                  <div className="relative flex-1 min-w-[140px]">
+                    <input
+                      ref={extNameRef}
+                      type="text"
+                      value={extName}
+                      onChange={e => { setExtName(e.target.value); setShowSuggestions(true) }}
+                      onFocus={() => setShowSuggestions(true)}
+                      onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+                      className="w-full rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                      style={{ backgroundColor: '#0f172a', border: '1px solid #334155' }}
+                      placeholder="Name"
+                    />
+                    {showSuggestions && filteredSuggestions.length > 0 && (
+                      <div
+                        className="absolute z-20 w-full mt-1 rounded-lg shadow-xl overflow-hidden"
+                        style={{ backgroundColor: '#1e293b', border: '1px solid #334155' }}
+                      >
+                        {filteredSuggestions.map((a, i) => (
+                          <button
+                            key={i}
+                            onMouseDown={() => handleSuggestionSelect(a)}
+                            className="w-full flex flex-col px-3 py-2 hover:bg-slate-700 transition-colors text-left"
+                          >
+                            <span className="text-sm text-white">{a.name || '—'}</span>
+                            {a.email && <span className="text-xs text-slate-400">{a.email}</span>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {/* Email */}
+                  <input
+                    type="email"
+                    value={extEmail}
+                    onChange={e => setExtEmail(e.target.value)}
+                    className="flex-1 min-w-[150px] rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                    style={{ backgroundColor: '#0f172a', border: '1px solid #334155' }}
+                    placeholder="Email"
+                  />
+                  {/* Role */}
+                  <select
+                    value={extRole}
+                    onChange={e => setExtRole(e.target.value)}
+                    className="rounded-lg px-2 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-violet-500"
+                    style={{ backgroundColor: '#0f172a', border: '1px solid #334155' }}
+                  >
+                    <option value="auditor">Auditor</option>
+                    <option value="lead">Lead</option>
+                    <option value="reviewer">Reviewer</option>
+                    <option value="observer">Observer</option>
+                  </select>
+                  {/* Add button */}
+                  <button
+                    onClick={handleAddExternalAuditor}
+                    disabled={extAdding || (!extName.trim() && !extEmail.trim())}
+                    className="px-3 py-2 rounded-lg text-sm font-semibold text-white bg-violet-600 hover:bg-violet-500 transition-colors disabled:opacity-50 whitespace-nowrap"
+                  >
+                    {extAdding ? 'Adding...' : 'Add'}
+                  </button>
+                </div>
+              </div>
             )}
           </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-700 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 transition-colors disabled:opacity-50"
-            >
-              {saving ? 'Saving...' : 'Save'}
-            </button>
+
+          {/* Footer */}
+          <div className="flex items-center justify-between px-6 py-4 border-t" style={{ borderColor: '#334155' }}>
+            <div>
+              {!isNew && (
+                <button
+                  onClick={handleDelete}
+                  disabled={saving}
+                  className="px-4 py-2 rounded-lg text-sm font-medium text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                >
+                  Delete
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={onClose}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 transition-colors disabled:opacity-50"
+              >
+                {saving ? 'Saving...' : 'Save'}
+              </button>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+
+      {/* Post-scheduling notification modal (Change 5) */}
+      {showNotify && newEntryId && (
+        <NotifyModal
+          entryId={newEntryId}
+          assignments={assignments}
+          onClose={() => { setShowNotify(false); onSaved() }}
+          toast={toast}
+        />
+      )}
+    </>
   )
 }
 
@@ -463,7 +847,6 @@ function CalendarTab({ toast }) {
   const loadEntries = useCallback(async () => {
     setLoading(true)
     try {
-      // Backend returns a plain list (not wrapped in {entries: [...]})
       const res = await adminGetAuditEntries({ year, month: month + 1 })
       setEntries(Array.isArray(res.data) ? res.data : (res.data?.data || []))
     } catch {
@@ -556,9 +939,13 @@ function CalendarTab({ toast }) {
                           key={entry.id}
                           onClick={(e) => { e.stopPropagation(); openEdit(entry) }}
                           className={`${STATUS_COLORS[entry.status] || 'bg-indigo-600'} text-white text-[10px] font-medium rounded px-1 py-0.5 truncate cursor-pointer hover:opacity-80 transition-opacity`}
-                          title={`${entry.client_name} — ${entry.company_name}`}
+                          title={`${entry.client_name} — ${entry.company_name}${entry.factory_name ? ` (${entry.factory_name})` : ''}`}
                         >
                           {entry.client_name}
+                          {/* Change 6: show factory in tooltip above; also show inline if room */}
+                          {entry.factory_name && (
+                            <span className="opacity-70 ml-1">· {entry.factory_name}</span>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -611,7 +998,6 @@ function ExpenseReviewTab({ toast }) {
     setLoading(true)
     try {
       const params = filter !== 'all' ? { status: filter } : {}
-      // Backend returns a plain list (not wrapped in {expenses: [...]})
       const res = await adminGetAllExpenses(params)
       setExpenses(Array.isArray(res.data) ? res.data : (res.data?.data || []))
     } catch {
@@ -692,7 +1078,6 @@ function ExpenseReviewTab({ toast }) {
             </thead>
             <tbody>
               {expenses.map((exp, i) => (
-                // key must be on the fragment, not the inner <tr>
                 <React.Fragment key={exp.id}>
                   <tr
                     style={{
@@ -701,15 +1086,12 @@ function ExpenseReviewTab({ toast }) {
                     }}
                   >
                     <td className="px-4 py-3 text-slate-300">
-                      {/* Append T00:00:00 to avoid UTC timezone shift on date-only strings */}
                       {exp.expense_date ? new Date(exp.expense_date + 'T00:00:00').toLocaleDateString() : '—'}
                     </td>
                     <td className="px-4 py-3 text-slate-300 max-w-[120px] truncate">
-                      {/* Backend serializes expenses with flat user_name/user_email fields */}
                       {exp.user_name || exp.user_email || '—'}
                     </td>
                     <td className="px-4 py-3 text-slate-300 max-w-[140px] truncate">
-                      {/* Backend serializes expenses with flat audit_client/audit_company fields */}
                       {exp.audit_client || exp.audit_company || '—'}
                     </td>
                     <td className="px-4 py-3 text-slate-300 capitalize">
@@ -798,7 +1180,6 @@ function OverviewTab({ toast }) {
           adminGetAuditEntries({ year: thisYear }),
           adminGetAllExpenses({}),
         ])
-        // Both endpoints return plain lists (not wrapped in {entries:[]} or {expenses:[]})
         const entries  = Array.isArray(entriesRes.data)  ? entriesRes.data  : (entriesRes.data?.data  || [])
         const expenses = Array.isArray(expensesRes.data) ? expensesRes.data : (expensesRes.data?.data || [])
 
@@ -806,8 +1187,6 @@ function OverviewTab({ toast }) {
         const approvedExpenses = expenses.filter(e => e.status === 'approved')
         const totalApproved    = approvedExpenses.reduce((sum, e) => sum + (e.amount_cents || 0), 0)
 
-        // Unique auditor count across all assignments
-        // Backend serializes assignments with flat user_id field (not nested user object)
         const userIds = new Set()
         entries.forEach(entry => {
           (entry.assignments || []).forEach(a => {

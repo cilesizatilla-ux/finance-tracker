@@ -219,6 +219,7 @@ def get_profile(current_user: User = Depends(get_current_user), db: Session = De
         "income_bracket": profile.income_bracket,
         "financial_goal": profile.financial_goal,
         "occupation": profile.occupation,
+        "user_type": getattr(profile, "user_type", None),
         "created_at": current_user.created_at.isoformat() if current_user.created_at else None,
     })
 
@@ -245,6 +246,43 @@ def update_profile(
     profile.updated_at = datetime.utcnow()
     db.commit()
     return APIResponse(data={"message": "Profile updated"})
+
+
+class ProfileSetupPayload(PydanticBase):
+    user_type: str  # user, auditor, lead_auditor, observer, admin, pending_admin
+
+
+@router.post("/profile-setup")
+def profile_setup(
+    payload: ProfileSetupPayload,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from backend.models import UserProfile, AdminUser
+    valid_types = {"user", "auditor", "lead_auditor", "observer", "admin", "pending_admin"}
+    if payload.user_type not in valid_types:
+        raise HTTPException(status_code=400, detail=f"user_type must be one of: {', '.join(valid_types)}")
+
+    profile = db.query(UserProfile).filter(UserProfile.user_id == current_user.id).first()
+    if not profile:
+        profile = UserProfile(user_id=current_user.id)
+        db.add(profile)
+
+    # If requesting admin role, store as pending_admin and notify super admins
+    actual_type = "pending_admin" if payload.user_type == "admin" else payload.user_type
+    profile.user_type = actual_type
+    db.commit()
+
+    needs_approval = payload.user_type == "admin"
+    return APIResponse(data={
+        "user_type": actual_type,
+        "needs_approval": needs_approval,
+        "message": (
+            "Your admin role request has been sent to a Super Admin for approval."
+            if needs_approval
+            else "Profile role set successfully."
+        ),
+    })
 
 
 @router.get("/notifications")

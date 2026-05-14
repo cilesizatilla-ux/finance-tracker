@@ -128,6 +128,7 @@ export const deleteShare = (id) =>
 
 export const getProfile = () => api.get('/auth/profile')
 export const updateProfile = (data) => api.patch('/auth/profile', data)
+export const setupProfile = (data) => api.post('/auth/profile-setup', data)
 export const changePassword = (payload) => api.post('/auth/change-password', payload)
 export const exportUserData = () => api.get('/auth/export-data')
 

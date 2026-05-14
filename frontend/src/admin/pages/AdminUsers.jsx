@@ -6,6 +6,26 @@ import { useAdminToast } from '../AdminToast.jsx'
 
 const fmt = (cents) => '$' + (Math.abs(cents) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
+function roleBadge(userType) {
+  const map = {
+    user:          { label: 'User',          bg: '#94a3b820', color: '#94a3b8' },
+    auditor:       { label: 'Auditor',        bg: '#3b82f620', color: '#93c5fd' },
+    lead_auditor:  { label: 'Lead Auditor',   bg: '#f59e0b20', color: '#fbbf24' },
+    observer:      { label: 'Observer',       bg: '#8b5cf620', color: '#c4b5fd' },
+    admin:         { label: 'Admin',          bg: '#ef444420', color: '#fca5a5' },
+    pending_admin: { label: 'Pending Admin',  bg: '#f9731620', color: '#fdba74' },
+  }
+  const entry = map[userType] || map.user
+  return (
+    <span
+      className="px-2 py-0.5 rounded-full text-[11px] font-semibold"
+      style={{ backgroundColor: entry.bg, color: entry.color }}
+    >
+      {entry.label}
+    </span>
+  )
+}
+
 function fmtDate(dateStr) {
   if (!dateStr) return '—'
   try {
@@ -200,7 +220,7 @@ export default function AdminUsers() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b" style={{ borderColor: '#334155' }}>
-                  {['User', 'Joined', 'Last Active', 'Transactions', 'Income', 'Expenses', 'Status', 'Actions'].map((h) => (
+                  {['User', 'Joined', 'Last Active', 'Transactions', 'Income', 'Expenses', 'Status', 'Role', 'Actions'].map((h) => (
                     <th key={h} className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#64748b' }}>
                       {h}
                     </th>
@@ -210,7 +230,7 @@ export default function AdminUsers() {
               <tbody className="divide-y divide-slate-700/50">
                 {users.length === 0 ? (
                   <tr>
-                    <td colSpan={isSuperAdmin ? 8 : 8} className="text-center py-12 text-sm" style={{ color: '#64748b' }}>
+                    <td colSpan={9} className="text-center py-12 text-sm" style={{ color: '#64748b' }}>
                       No users found.
                     </td>
                   </tr>
@@ -253,6 +273,9 @@ export default function AdminUsers() {
                           <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: user.is_suspended ? '#ef4444' : '#22c55e' }} />
                           {user.is_suspended ? 'Suspended' : 'Active'}
                         </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        {roleBadge(user.user_type)}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">

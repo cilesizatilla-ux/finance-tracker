@@ -1,6 +1,6 @@
 from datetime import datetime
 from sqlalchemy import (
-    Boolean, Column, Date, DateTime, ForeignKey,
+    Boolean, Column, Date, DateTime, Float, ForeignKey,
     Integer, String, Text, event
 )
 from sqlalchemy.sql import func
@@ -141,6 +141,7 @@ class UserProfile(Base):
     income_bracket = Column(String, nullable=True)  # "0-25k", "25k-50k", "50k-100k", "100k-200k", "200k+"
     financial_goal = Column(String, nullable=True)  # "save", "invest", "debt_free", "retire_early", "track"
     occupation = Column(String, nullable=True)
+    user_type = Column(String, nullable=True)  # user, auditor, lead_auditor, observer, admin, pending_admin
     is_suspended = Column(Boolean, default=False, nullable=False, server_default="0")
     suspended_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
@@ -168,8 +169,9 @@ class AuditEntry(Base):
     id = Column(Integer, primary_key=True, index=True)
     client_name = Column(String, nullable=False)
     company_name = Column(String, nullable=False)
+    factory_name = Column(String, nullable=True)
     audit_date = Column(Date, nullable=False)
-    duration_days = Column(Integer, nullable=False, default=1)
+    duration_days = Column(Float, nullable=False, default=1.0)
     notes = Column(Text, nullable=True)
     location = Column(String, nullable=True)
     status = Column(String, default="scheduled")  # scheduled, in_progress, completed, cancelled
@@ -183,11 +185,15 @@ class AuditAssignment(Base):
     __tablename__ = "audit_assignments"
     id = Column(Integer, primary_key=True, index=True)
     audit_id = Column(Integer, ForeignKey("audit_entries.id"), nullable=False)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    role = Column(String, default="auditor")  # auditor, lead, reviewer
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    role = Column(String, default="auditor")  # auditor, lead, reviewer, observer
+    auditor_name = Column(String, nullable=True)
+    auditor_email = Column(String, nullable=True)
+    notify_sent = Column(Boolean, default=False)
+    approval_requested = Column(Boolean, default=False)
     assigned_at = Column(DateTime, default=func.now())
     audit_entry = relationship("AuditEntry", back_populates="assignments")
-    user = relationship("User")
+    user = relationship("User", foreign_keys=[user_id])
 
 class AuditExpense(Base):
     __tablename__ = "audit_expenses"

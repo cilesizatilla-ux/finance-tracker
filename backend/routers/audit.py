@@ -19,8 +19,9 @@ admin_audit_router = APIRouter(prefix="/admin/audit", tags=["admin-audit"])
 class AuditEntryCreate(BaseModel):
     client_name: str
     company_name: str
+    factory_name: Optional[str] = None
     audit_date: date
-    duration_days: int = 1
+    duration_days: float = 1.0
     notes: Optional[str] = None
     location: Optional[str] = None
     status: str = "scheduled"
@@ -28,15 +29,21 @@ class AuditEntryCreate(BaseModel):
 class AuditEntryUpdate(BaseModel):
     client_name: Optional[str] = None
     company_name: Optional[str] = None
+    factory_name: Optional[str] = None
     audit_date: Optional[date] = None
-    duration_days: Optional[int] = None
+    duration_days: Optional[float] = None
     notes: Optional[str] = None
     location: Optional[str] = None
     status: Optional[str] = None
 
 class AssignPayload(BaseModel):
-    user_id: int
+    user_id: Optional[int] = None
+    auditor_name: Optional[str] = None
+    auditor_email: Optional[str] = None
     role: str = "auditor"
+
+class NotifyPayload(BaseModel):
+    assignment_ids: Optional[List[int]] = None  # None = notify all
 
 class ExpenseCreate(BaseModel):
     amount_cents: int
@@ -64,6 +71,7 @@ def _ser_entry(e: AuditEntry) -> dict:
         "id": e.id,
         "client_name": e.client_name,
         "company_name": e.company_name,
+        "factory_name": getattr(e, "factory_name", None),
         "audit_date": e.audit_date.isoformat(),
         "duration_days": e.duration_days,
         "notes": e.notes,
@@ -75,8 +83,12 @@ def _ser_entry(e: AuditEntry) -> dict:
                 "id": a.id,
                 "user_id": a.user_id,
                 "role": a.role,
-                "user_name": a.user.name if a.user else None,
-                "user_email": a.user.email if a.user else None,
+                "user_name": a.user.name if a.user else getattr(a, "auditor_name", None),
+                "user_email": a.user.email if a.user else getattr(a, "auditor_email", None),
+                "auditor_name": getattr(a, "auditor_name", None),
+                "auditor_email": getattr(a, "auditor_email", None),
+                "notify_sent": getattr(a, "notify_sent", False),
+                "approval_requested": getattr(a, "approval_requested", False),
             }
             for a in (e.assignments or [])
         ],
@@ -395,21 +407,37 @@ def admin_assign_auditor(
     e = db.query(AuditEntry).filter(AuditEntry.id == entry_id).first()
     if not e:
         raise HTTPException(status_code=404, detail="Audit not found")
-    user = db.query(User).filter(User.id == payload.user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    existing = db.query(AuditAssignment).filter(
-        AuditAssignment.audit_id == entry_id,
-        AuditAssignment.user_id == payload.user_id,
-    ).first()
-    if existing:
-        existing.role = payload.role
-        db.commit()
-        return {"ok": True, "updated": True}
-    a = AuditAssignment(audit_id=entry_id, user_id=payload.user_id, role=payload.role)
+
+    if payload.user_id is not None:
+        # Registered user assignment
+        user = db.query(User).filter(User.id == payload.user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        existing = db.query(AuditAssignment).filter(
+            AuditAssignment.audit_id == entry_id,
+            AuditAssignment.user_id == payload.user_id,
+        ).first()
+        if existing:
+            existing.role = payload.role
+            db.commit()
+            return {"ok": True, "updated": True}
+        a = AuditAssignment(audit_id=entry_id, user_id=payload.user_id, role=payload.role)
+    else:
+        # External auditor (by name + email)
+        if not payload.auditor_name:
+            raise HTTPException(status_code=400, detail="auditor_name required for external auditors")
+        a = AuditAssignment(
+            audit_id=entry_id,
+            user_id=None,
+            role=payload.role,
+            auditor_name=payload.auditor_name,
+            auditor_email=payload.auditor_email,
+        )
+
     db.add(a)
     db.commit()
-    return {"ok": True, "updated": False}
+    db.refresh(a)
+    return {"ok": True, "updated": False, "assignment_id": a.id}
 
 
 @admin_audit_router.delete("/entries/{entry_id}/assign/{user_id}")
@@ -428,6 +456,115 @@ def admin_unassign_auditor(
     db.delete(a)
     db.commit()
     return {"ok": True}
+
+
+@admin_audit_router.delete("/entries/{entry_id}/assignments/{assignment_id}")
+def admin_unassign_by_id(
+    entry_id: int,
+    assignment_id: int,
+    db: Session = Depends(get_db),
+    admin=Depends(get_current_admin),
+):
+    a = db.query(AuditAssignment).filter(
+        AuditAssignment.id == assignment_id,
+        AuditAssignment.audit_id == entry_id,
+    ).first()
+    if not a:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    db.delete(a)
+    db.commit()
+    return {"ok": True}
+
+
+@admin_audit_router.post("/entries/{entry_id}/notify")
+def admin_notify_auditors(
+    entry_id: int,
+    payload: NotifyPayload,
+    db: Session = Depends(get_db),
+    admin=Depends(get_current_admin),
+):
+    e = db.query(AuditEntry).filter(AuditEntry.id == entry_id).first()
+    if not e:
+        raise HTTPException(status_code=404, detail="Audit not found")
+
+    q = db.query(AuditAssignment).filter(AuditAssignment.audit_id == entry_id)
+    if payload.assignment_ids:
+        q = q.filter(AuditAssignment.id.in_(payload.assignment_ids))
+    assignments = q.all()
+
+    notified = []
+    for a in assignments:
+        email = a.user.email if a.user else getattr(a, "auditor_email", None)
+        name = a.user.name if a.user else getattr(a, "auditor_name", "Auditor")
+        # In production, send real email here. For now mark as sent.
+        a.notify_sent = True
+        if email:
+            notified.append({"name": name, "email": email})
+    db.commit()
+    return {"ok": True, "notified": notified}
+
+
+@admin_audit_router.post("/entries/{entry_id}/request-approval")
+def admin_request_approval(
+    entry_id: int,
+    db: Session = Depends(get_db),
+    admin=Depends(get_current_admin),
+):
+    e = db.query(AuditEntry).filter(AuditEntry.id == entry_id).first()
+    if not e:
+        raise HTTPException(status_code=404, detail="Audit not found")
+    assignments = db.query(AuditAssignment).filter(AuditAssignment.audit_id == entry_id).all()
+    for a in assignments:
+        a.approval_requested = True
+    db.commit()
+    return {"ok": True, "entry_id": entry_id}
+
+
+@admin_audit_router.get("/directory")
+def audit_directory(
+    db: Session = Depends(get_db),
+    admin=Depends(get_current_admin),
+):
+    from sqlalchemy import func as sqlfunc
+    entries = db.query(AuditEntry).options(
+        joinedload(AuditEntry.assignments).joinedload(AuditAssignment.user)
+    ).all()
+
+    customers: dict = {}   # client_name → count
+    factories: dict = {}   # factory_name → count
+    auditors: dict = {}    # email/name → {name, email, count}
+    lead_auditors: dict = {}
+    observers: dict = {}
+
+    for e in entries:
+        # Customers
+        customers[e.client_name] = customers.get(e.client_name, 0) + 1
+        # Factories
+        fn = getattr(e, "factory_name", None) or e.company_name
+        if fn:
+            factories[fn] = factories.get(fn, 0) + 1
+        # Assignments
+        for a in (e.assignments or []):
+            name = a.user.name if a.user else getattr(a, "auditor_name", "Unknown")
+            email = a.user.email if a.user else getattr(a, "auditor_email", "")
+            key = email or name
+            role = a.role or "auditor"
+            bucket = (
+                lead_auditors if role == "lead"
+                else observers if role == "observer"
+                else auditors  # auditor + reviewer
+            )
+            if key not in bucket:
+                bucket[key] = {"name": name, "email": email, "audit_count": 0}
+            bucket[key]["audit_count"] += 1
+
+    return {
+        "customers": [{"name": k, "audit_count": v} for k, v in sorted(customers.items())],
+        "factories": [{"name": k, "audit_count": v} for k, v in sorted(factories.items())],
+        "auditors": list(auditors.values()),
+        "lead_auditors": list(lead_auditors.values()),
+        "observers": list(observers.values()),
+    }
 
 
 @admin_audit_router.get("/expenses")
