@@ -45,6 +45,13 @@ function CustomTooltip({ active, payload, label }) {
 }
 
 const RECO_COLORS = {
+  // keys match the `type` values returned by GET /analytics/recommendations
+  missing_profile: { bg: '#f59e0b20', border: '#f59e0b50', text: '#fbbf24', icon: '#f59e0b' },
+  incomplete_profile: { bg: '#f59e0b20', border: '#f59e0b50', text: '#fbbf24', icon: '#f59e0b' },
+  no_transactions: { bg: '#6366f120', border: '#6366f150', text: '#818cf8', icon: '#6366f1' },
+  zero_budget_categories: { bg: '#f59e0b20', border: '#f59e0b50', text: '#fbbf24', icon: '#f59e0b' },
+  unreviewed_anomalies: { bg: '#ef444420', border: '#ef444450', text: '#fca5a5', icon: '#ef4444' },
+  // fallback aliases so any future type values with these names still work
   warning: { bg: '#f59e0b20', border: '#f59e0b50', text: '#fbbf24', icon: '#f59e0b' },
   info: { bg: '#6366f120', border: '#6366f150', text: '#818cf8', icon: '#6366f1' },
   success: { bg: '#22c55e20', border: '#22c55e50', text: '#4ade80', icon: '#22c55e' },

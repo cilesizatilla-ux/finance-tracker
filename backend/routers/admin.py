@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Query, HTTPException
-from sqlalchemy import func, or_
+from sqlalchemy import case, func, or_
 from sqlalchemy.orm import Session
 
 from backend.admin_auth import (
@@ -77,7 +77,9 @@ def admin_login(
     username = payload.get("username", "").strip()
     password = payload.get("password", "")
 
-    admin = db.query(AdminUser).filter(AdminUser.username == username).first()
+    admin = db.query(AdminUser).filter(
+        or_(AdminUser.username == username, AdminUser.email == username)
+    ).first()
     if not admin or not verify_password(password, admin.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     if not admin.is_active:
@@ -144,13 +146,13 @@ def list_users(
             Transaction.user_id,
             func.count(Transaction.id).label("txn_count"),
             func.sum(
-                func.case(
+                case(
                     (Transaction.is_income == True, Transaction.amount_cents),
                     else_=0,
                 )
             ).label("total_income"),
             func.sum(
-                func.case(
+                case(
                     (Transaction.is_income == False, func.abs(Transaction.amount_cents)),
                     else_=0,
                 )
@@ -455,10 +457,10 @@ def analytics_trends(
         db.query(
             func.strftime("%Y-%m", Transaction.date).label("month"),
             func.sum(
-                func.case((Transaction.is_income == True, Transaction.amount_cents), else_=0)
+                case((Transaction.is_income == True, Transaction.amount_cents), else_=0)
             ).label("income_cents"),
             func.sum(
-                func.case((Transaction.is_income == False, func.abs(Transaction.amount_cents)), else_=0)
+                case((Transaction.is_income == False, func.abs(Transaction.amount_cents)), else_=0)
             ).label("expense_cents"),
             func.count(Transaction.id).label("transaction_count"),
             func.count(func.distinct(Transaction.user_id)).label("unique_users"),
