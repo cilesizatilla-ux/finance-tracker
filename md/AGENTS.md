@@ -43,7 +43,7 @@ Answers natural language questions about your finances by querying your SQLite d
 
 **Tools it uses:**
 - `get_spending_by_category(month, year)` — fetches totals per category
-- `get_budget_limits()` — fetches all category budget caps
+- `get_budget_status()` — fetches all category budget limits and current spending
 - `get_cash_flow(month, year)` — fetches income vs. expense totals
 - `get_recent_transactions(limit)` — fetches last N transactions
 

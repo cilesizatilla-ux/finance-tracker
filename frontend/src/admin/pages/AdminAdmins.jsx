@@ -89,7 +89,7 @@ export default function AdminAdmins() {
         a.id === adminId ? { ...a, is_active: !a.is_active } : a
       ))
       const updated = admins.find((a) => a.id === adminId)
-      toast.success(updated?.is_active ? 'Admin deactivated.' : 'Admin activated.')
+      toast.success(!updated?.is_active ? 'Admin deactivated.' : 'Admin activated.')
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to update admin status.')
     } finally {

@@ -84,7 +84,7 @@ export default function AdminDashboard() {
       setRecommendations(recoRes.data?.data || recoRes.data || [])
       setLastUpdated(new Date())
       adminApi.get('/analytics/budget-compliance')
-        .then(res => setBudgetCompliance(res.data?.data))
+        .then(res => setBudgetCompliance(res.data?.data ?? res.data))
         .catch(() => {})
     } catch {
       setError('Failed to load dashboard data.')

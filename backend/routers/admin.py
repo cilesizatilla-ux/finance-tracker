@@ -726,7 +726,7 @@ def budget_compliance(db: Session = Depends(get_db)):
     )
     total_users = db.query(func.count(User.id)).scalar() or 0
     if users_with_budget == 0:
-        return APIResponse(data={"compliance_pct": 0, "users_with_budget": 0, "total_users": total_users})
+        return APIResponse(data={"budget_adoption_pct": 0, "users_with_budget": 0, "total_users": total_users})
     return APIResponse(data={
         "users_with_budget": users_with_budget,
         "total_users": total_users,
@@ -932,8 +932,8 @@ def delete_admin(
     if target.id == current_admin.id:
         raise HTTPException(status_code=400, detail="Cannot delete yourself")
 
-    # Prevent deleting the only super_admin
-    if target.role == "super_admin":
+    # Prevent deleting the only active super_admin
+    if target.role == "super_admin" and target.is_active:
         super_count = (
             db.query(func.count(AdminUser.id))
             .filter(AdminUser.role == "super_admin", AdminUser.is_active == True)
@@ -1001,7 +1001,7 @@ def list_audit_logs(
 class PasswordResetPayload(BaseModel):
     new_password: str
 
-@router.post("/users/{user_id}/reset-password", dependencies=[Depends(get_current_admin)])
+@router.post("/users/{user_id}/reset-password")
 def admin_reset_user_password(
     user_id: int,
     payload: PasswordResetPayload,
@@ -1019,7 +1019,7 @@ def admin_reset_user_password(
         action="reset_user_password",
         target_type="User",
         target_id=user_id,
-        detail=f"Password reset by admin {admin.username}",
+        detail=json.dumps({"message": f"Password reset by admin {admin.username}"}),
     ))
     db.commit()
     return APIResponse(data={"message": "Password reset successfully"})
@@ -1033,7 +1033,7 @@ def admin_reset_user_password(
 def impersonate_user(
     user_id: int,
     db: Session = Depends(get_db),
-    current_admin: AdminUser = Depends(get_current_admin),
+    current_admin: AdminUser = Depends(require_super_admin),
 ):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
@@ -1078,7 +1078,8 @@ def broadcast_notification(
         raise HTTPException(status_code=422, detail="Title is required")
     notif = Notification(title=payload.title.strip(), body=payload.body.strip() or None, created_by_id=admin.id)
     db.add(notif)
-    db.add(AdminAuditLog(admin_id=admin.id, action="broadcast_notification", target_type="Notification", target_id=0, detail=payload.title))
+    db.flush()
+    db.add(AdminAuditLog(admin_id=admin.id, action="broadcast_notification", target_type="Notification", target_id=notif.id, detail=json.dumps({"title": payload.title})))
     db.commit()
     return APIResponse(data={"message": "Notification broadcast", "id": notif.id})
 
@@ -1146,24 +1147,24 @@ def system_overview(
         .scalar() or 0
     )
     total_volume = (
-        db.query(func.sum(Transaction.amount_cents))
+        db.query(func.sum(func.abs(Transaction.amount_cents)))
         .filter(Transaction.deleted_at.is_(None))
         .scalar() or 0
     )
     total_audits = db.query(func.count(AuditEntry.id)).scalar() or 0
-    cutoff = datetime.utcnow() - timedelta(days=30)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=30)
     new_users_30d = (
         db.query(func.count(User.id))
         .filter(User.created_at >= cutoff)
         .scalar() or 0
     )
-    return {
+    return APIResponse(data={
         "total_users": total_users,
         "total_transactions": total_transactions,
         "total_volume_cents": int(total_volume),
         "total_audits": total_audits,
         "new_users_30d": new_users_30d,
-    }
+    })
 
 
 @router.get("/analytics/monthly-volume")
@@ -1175,24 +1176,21 @@ def monthly_volume(
     from sqlalchemy import extract
 
     results = []
-    today = datetime.utcnow().date()
+    today = datetime.now(timezone.utc).date()
     for i in range(11, -1, -1):
         month_offset = today.month - i
         year_offset = today.year
         while month_offset <= 0:
             month_offset += 12
             year_offset -= 1
-        while month_offset > 12:
-            month_offset -= 12
-            year_offset += 1
 
         q = db.query(
             func.count(Transaction.id).label("count"),
-            func.coalesce(func.sum(Transaction.amount_cents), 0).label("volume"),
+            func.coalesce(func.sum(func.abs(Transaction.amount_cents)), 0).label("volume"),
         ).filter(
             Transaction.deleted_at.is_(None),
-            extract("year", Transaction.created_at) == year_offset,
-            extract("month", Transaction.created_at) == month_offset,
+            extract("year", Transaction.date) == year_offset,
+            extract("month", Transaction.date) == month_offset,
         )
         row = q.first()
         month_name = cal_mod.month_abbr[month_offset]
@@ -1203,4 +1201,4 @@ def monthly_volume(
             "tx_count": row.count if row else 0,
             "volume_cents": int(row.volume) if row else 0,
         })
-    return results
+    return APIResponse(data=results)

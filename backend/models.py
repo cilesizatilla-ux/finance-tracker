@@ -20,6 +20,7 @@ class User(Base):
     google_id = Column(String, unique=True, nullable=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    last_active_at = Column(DateTime, nullable=True)
 
 
 class Category(Base):

@@ -7,8 +7,8 @@ import adminApi from '../adminApi.js'
 
 function formatVolume(cents) {
   const dollars = Math.abs(cents) / 100
-  if (dollars >= 1_000_000) return `$${(dollars / 1_000_000).toFixed(2)}m`
-  if (dollars >= 1_000) return `$${(dollars / 1_000).toFixed(2)}k`
+  if (dollars >= 1_000_000) return `$${(dollars / 1_000_000).toFixed(1)}m`
+  if (dollars >= 1_000) return `$${(dollars / 1_000).toFixed(1)}k`
   return `$${dollars.toFixed(2)}`
 }
 
@@ -43,8 +43,8 @@ export default function AdminSystemHealth() {
           adminApi.get('/analytics/system-overview'),
           adminApi.get('/analytics/monthly-volume'),
         ])
-        setOverview(ovRes.data)
-        setMonthlyVolume(volRes.data)
+        setOverview(ovRes.data?.data ?? ovRes.data)
+        setMonthlyVolume(volRes.data?.data ?? volRes.data ?? [])
       } catch {}
       setLoading(false)
     }
@@ -159,7 +159,7 @@ export default function AdminSystemHealth() {
               tick={{ fill: '#94a3b8', fontSize: 11 }}
               axisLine={false}
               tickLine={false}
-              tickFormatter={(v) => `$${v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v}`}
+              tickFormatter={(v) => { const d = v / 100; return `$${d >= 1000 ? (d / 1000).toFixed(0) + 'k' : d.toFixed(0)}` }}
             />
             <Tooltip
               contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: 8 }}

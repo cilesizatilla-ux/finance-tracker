@@ -57,13 +57,15 @@ def get_cashflow(
 
 @router.get("/budget", response_model=APIResponse[List[BudgetStatus]])
 def get_budget_status(
+    month: int = Query(None, ge=1, le=12),
+    year: int = Query(None, ge=2000, le=2100),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     from sqlalchemy import func
     now = datetime.utcnow()
-    month = now.month
-    year = now.year
+    month = month if month is not None else now.month
+    year = year if year is not None else now.year
 
     categories = db.query(Category).filter(
         or_(Category.user_id.is_(None), Category.user_id == current_user.id)

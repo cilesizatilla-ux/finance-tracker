@@ -10,7 +10,7 @@ export default function AdminNotifications() {
   const { toast, ToastContainer } = useAdminToast()
 
   useEffect(() => {
-    adminApi.get('/notifications').then(r => setPast(r.data?.data || [])).catch(() => {})
+    adminApi.get('/notifications').then(r => setPast(r.data?.data || r.data || [])).catch(() => {})
   }, [])
 
   async function handleSend() {
@@ -21,7 +21,7 @@ export default function AdminNotifications() {
       toast.success('Notification broadcast to all users')
       setTitle(''); setBody('')
       const r = await adminApi.get('/notifications')
-      setPast(r.data?.data || [])
+      setPast(r.data?.data || r.data || [])
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to send')
     } finally {

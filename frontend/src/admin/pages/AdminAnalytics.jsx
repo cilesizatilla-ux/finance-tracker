@@ -101,13 +101,13 @@ export default function AdminAnalytics() {
 
   useEffect(() => {
     adminApi.get('/analytics/category-breakdown')
-      .then(res => setCategoryBreakdown(res.data?.data || []))
+      .then(res => setCategoryBreakdown(res.data?.data || res.data || []))
       .catch(() => {})
   }, [])
 
   useEffect(() => {
     adminApi.get('/analytics/daily-activity')
-      .then(res => setDailyActivity(res.data?.data || []))
+      .then(res => setDailyActivity(res.data?.data || res.data || []))
       .catch(() => {})
   }, [])
 

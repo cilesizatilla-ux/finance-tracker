@@ -1,5 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
-import adminApi from '../adminApi.js'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   adminGetAuditEntries,
   adminCreateAuditEntry,
@@ -122,8 +121,9 @@ function AuditModal({ entry, onClose, onSaved, toast }) {
     const t = setTimeout(async () => {
       setUserLoading(true)
       try {
+        // GET /admin/users returns APIResponse: { data: [...], total: N }
         const res = await adminListUsers({ search: userSearch, per_page: 10 })
-        setUserResults(res.data?.users || res.data?.data || res.data || [])
+        setUserResults(res.data?.data || res.data || [])
       } catch {
         setUserResults([])
       } finally {
@@ -136,9 +136,13 @@ function AuditModal({ entry, onClose, onSaved, toast }) {
   const handleAssign = async (user) => {
     setAssigningId(user.id)
     try {
-      const res = await adminAssignAuditor(entry.id, { user_id: user.id, role: 'auditor' })
-      const updated = res.data?.assignments || [...assignments, { user_id: user.id, role: 'auditor', user }]
-      setAssignments(updated)
+      // POST /admin/audit/entries/:id/assign returns {ok, updated} — no assignments list
+      await adminAssignAuditor(entry.id, { user_id: user.id, role: 'auditor' })
+      // Append a locally-constructed assignment using the flat shape the backend uses
+      setAssignments(prev => {
+        if (prev.some(a => a.user_id === user.id)) return prev
+        return [...prev, { user_id: user.id, role: 'auditor', user_name: user.name || null, user_email: user.email || null }]
+      })
       setUserSearch('')
       setUserResults([])
       toast.success('Auditor assigned')
@@ -153,7 +157,8 @@ function AuditModal({ entry, onClose, onSaved, toast }) {
     setUnassigningId(userId)
     try {
       await adminUnassignAuditor(entry.id, userId)
-      setAssignments(a => a.filter(x => x.user_id !== userId && x.user?.id !== userId))
+      // Backend serializes assignments with flat user_id field
+      setAssignments(a => a.filter(x => x.user_id !== userId))
       toast.success('Auditor removed')
     } catch {
       toast.error('Failed to remove auditor')
@@ -165,10 +170,8 @@ function AuditModal({ entry, onClose, onSaved, toast }) {
   const handleChangeRole = async (userId, role) => {
     try {
       await adminAssignAuditor(entry.id, { user_id: userId, role })
-      setAssignments(a => a.map(x => {
-        const xId = x.user_id || x.user?.id
-        return xId === userId ? { ...x, role } : x
-      }))
+      // Update role locally; backend serializes assignments with flat user_id
+      setAssignments(a => a.map(x => x.user_id === userId ? { ...x, role } : x))
     } catch {
       toast.error('Failed to update role')
     }
@@ -330,8 +333,9 @@ function AuditModal({ entry, onClose, onSaved, toast }) {
               {assignments.length > 0 ? (
                 <div className="space-y-2 mb-3">
                   {assignments.map(a => {
-                    const uid = a.user_id || a.user?.id
-                    const name = a.user?.name || a.user?.email || `User #${uid}`
+                    // Backend serializes assignments with flat user_id, user_name, user_email
+                    const uid = a.user_id
+                    const name = a.user_name || a.user_email || `User #${uid}`
                     return (
                       <div
                         key={uid}
@@ -391,7 +395,7 @@ function AuditModal({ entry, onClose, onSaved, toast }) {
                       <button
                         key={u.id}
                         onClick={() => handleAssign(u)}
-                        disabled={assigningId === u.id || assignments.some(a => (a.user_id || a.user?.id) === u.id)}
+                        disabled={assigningId === u.id || assignments.some(a => a.user_id === u.id)}
                         className="w-full flex items-center gap-3 px-3 py-2 hover:bg-slate-700 transition-colors text-left disabled:opacity-40"
                       >
                         <div className="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-xs text-white font-semibold flex-shrink-0">
@@ -401,7 +405,7 @@ function AuditModal({ entry, onClose, onSaved, toast }) {
                           <p className="text-sm text-white">{u.name || '—'}</p>
                           <p className="text-xs text-slate-400">{u.email}</p>
                         </div>
-                        {assignments.some(a => (a.user_id || a.user?.id) === u.id) && (
+                        {assignments.some(a => a.user_id === u.id) && (
                           <span className="ml-auto text-xs text-emerald-400">Added</span>
                         )}
                       </button>
@@ -459,8 +463,9 @@ function CalendarTab({ toast }) {
   const loadEntries = useCallback(async () => {
     setLoading(true)
     try {
+      // Backend returns a plain list (not wrapped in {entries: [...]})
       const res = await adminGetAuditEntries({ year, month: month + 1 })
-      setEntries(res.data?.entries || res.data?.data || res.data || [])
+      setEntries(Array.isArray(res.data) ? res.data : (res.data?.data || []))
     } catch {
       toast.error('Failed to load audit entries')
     } finally {
@@ -606,8 +611,9 @@ function ExpenseReviewTab({ toast }) {
     setLoading(true)
     try {
       const params = filter !== 'all' ? { status: filter } : {}
+      // Backend returns a plain list (not wrapped in {expenses: [...]})
       const res = await adminGetAllExpenses(params)
-      setExpenses(res.data?.expenses || res.data?.data || res.data || [])
+      setExpenses(Array.isArray(res.data) ? res.data : (res.data?.data || []))
     } catch {
       toast.error('Failed to load expenses')
     } finally {
@@ -686,22 +692,25 @@ function ExpenseReviewTab({ toast }) {
             </thead>
             <tbody>
               {expenses.map((exp, i) => (
-                <>
+                // key must be on the fragment, not the inner <tr>
+                <React.Fragment key={exp.id}>
                   <tr
-                    key={exp.id}
                     style={{
                       backgroundColor: i % 2 === 0 ? '#1e293b' : '#1a2540',
                       borderTop: '1px solid #334155',
                     }}
                   >
                     <td className="px-4 py-3 text-slate-300">
-                      {exp.expense_date ? new Date(exp.expense_date).toLocaleDateString() : '—'}
+                      {/* Append T00:00:00 to avoid UTC timezone shift on date-only strings */}
+                      {exp.expense_date ? new Date(exp.expense_date + 'T00:00:00').toLocaleDateString() : '—'}
                     </td>
                     <td className="px-4 py-3 text-slate-300 max-w-[120px] truncate">
-                      {exp.user?.name || exp.user?.email || '—'}
+                      {/* Backend serializes expenses with flat user_name/user_email fields */}
+                      {exp.user_name || exp.user_email || '—'}
                     </td>
                     <td className="px-4 py-3 text-slate-300 max-w-[140px] truncate">
-                      {exp.audit_entry?.client_name || exp.audit_entry?.company_name || '—'}
+                      {/* Backend serializes expenses with flat audit_client/audit_company fields */}
+                      {exp.audit_client || exp.audit_company || '—'}
                     </td>
                     <td className="px-4 py-3 text-slate-300 capitalize">
                       {exp.category?.replace('_', ' ') || '—'}
@@ -735,7 +744,6 @@ function ExpenseReviewTab({ toast }) {
                   </tr>
                   {rejectOpen[exp.id] && (
                     <tr
-                      key={`reject-${exp.id}`}
                       style={{ backgroundColor: '#1e293b', borderTop: '1px solid #334155' }}
                     >
                       <td colSpan={7} className="px-4 py-3">
@@ -765,7 +773,7 @@ function ExpenseReviewTab({ toast }) {
                       </td>
                     </tr>
                   )}
-                </>
+                </React.Fragment>
               ))}
             </tbody>
           </table>
@@ -790,19 +798,20 @@ function OverviewTab({ toast }) {
           adminGetAuditEntries({ year: thisYear }),
           adminGetAllExpenses({}),
         ])
-        const entries  = entriesRes.data?.entries  || entriesRes.data?.data  || entriesRes.data  || []
-        const expenses = expensesRes.data?.expenses || expensesRes.data?.data || expensesRes.data || []
+        // Both endpoints return plain lists (not wrapped in {entries:[]} or {expenses:[]})
+        const entries  = Array.isArray(entriesRes.data)  ? entriesRes.data  : (entriesRes.data?.data  || [])
+        const expenses = Array.isArray(expensesRes.data) ? expensesRes.data : (expensesRes.data?.data || [])
 
         const pendingExpenses  = expenses.filter(e => e.status === 'pending')
         const approvedExpenses = expenses.filter(e => e.status === 'approved')
         const totalApproved    = approvedExpenses.reduce((sum, e) => sum + (e.amount_cents || 0), 0)
 
         // Unique auditor count across all assignments
+        // Backend serializes assignments with flat user_id field (not nested user object)
         const userIds = new Set()
         entries.forEach(entry => {
           (entry.assignments || []).forEach(a => {
-            const uid = a.user_id || a.user?.id
-            if (uid) userIds.add(uid)
+            if (a.user_id) userIds.add(a.user_id)
           })
         })
 

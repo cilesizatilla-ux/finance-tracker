@@ -98,7 +98,7 @@ export default function AdminUserDetail() {
         ...prev,
         profile: { ...prev.profile, is_suspended: !prev.profile?.is_suspended },
       }))
-      toast.success(data.is_suspended ? 'User suspended.' : 'User unsuspended.')
+      toast.success(data.data?.is_suspended ? 'User suspended.' : 'User unsuspended.')
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to update user status.')
     } finally {

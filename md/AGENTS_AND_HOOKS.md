@@ -193,6 +193,7 @@ The following commands run without permission prompts in this project:
 | Transaction amounts show $0 | `tx.amount_cents` used but frontend read `tx.amount`; `tx.is_income` used but read `tx.type` | Fixed in `Transactions.jsx` |
 | Category not shown in transaction table | `TransactionOut` schema had no `category_name`/`category_color` | Added optional fields + `_enrich()` helper in router |
 | Dates off by one day | `new Date("2026-05-13")` parsed as UTC midnight → local time shows previous day | Added `T00:00:00` suffix to force local time parsing |
+| Budget page month navigation always shows current month | `GET /api/v1/reports/budget` ignored `month`/`year` query params — hardcoded `utcnow()` | Added optional `month` and `year` query params to the endpoint in `reports.py` |
 
 ---
 
