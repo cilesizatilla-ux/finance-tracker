@@ -185,3 +185,92 @@ def google_login(payload: GoogleAuth, db: Session = Depends(get_db)):
 @router.get("/me", response_model=APIResponse[UserOut])
 def me(current_user: User = Depends(get_current_user)):
     return APIResponse(data=UserOut.model_validate(current_user))
+
+
+from pydantic import BaseModel as PydanticBase
+from typing import Optional as Opt
+
+
+class ProfileUpdate(PydanticBase):
+    name: Opt[str] = None
+    country: Opt[str] = None
+    currency: Opt[str] = None
+    income_bracket: Opt[str] = None
+    financial_goal: Opt[str] = None
+    occupation: Opt[str] = None
+
+
+@router.get("/profile")
+def get_profile(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    from backend.models import UserProfile
+    profile = db.query(UserProfile).filter(UserProfile.user_id == current_user.id).first()
+    if not profile:
+        profile = UserProfile(user_id=current_user.id)
+        db.add(profile)
+        db.commit()
+        db.refresh(profile)
+    return APIResponse(data={
+        "id": current_user.id,
+        "email": current_user.email,
+        "name": current_user.name,
+        "avatar_url": current_user.avatar_url,
+        "country": profile.country,
+        "currency": profile.currency,
+        "income_bracket": profile.income_bracket,
+        "financial_goal": profile.financial_goal,
+        "occupation": profile.occupation,
+        "created_at": current_user.created_at.isoformat() if current_user.created_at else None,
+    })
+
+
+@router.patch("/profile")
+def update_profile(
+    payload: ProfileUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from backend.models import UserProfile
+    from datetime import datetime
+    if payload.name:
+        current_user.name = payload.name
+        current_user.updated_at = datetime.utcnow()
+    profile = db.query(UserProfile).filter(UserProfile.user_id == current_user.id).first()
+    if not profile:
+        profile = UserProfile(user_id=current_user.id)
+        db.add(profile)
+    for field in ("country", "currency", "income_bracket", "financial_goal", "occupation"):
+        val = getattr(payload, field)
+        if val is not None:
+            setattr(profile, field, val)
+    profile.updated_at = datetime.utcnow()
+    db.commit()
+    return APIResponse(data={"message": "Profile updated"})
+
+
+@router.get("/notifications")
+def list_notifications(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    from backend.models import Notification, UserNotificationRead
+    notifs = db.query(Notification).order_by(Notification.created_at.desc()).limit(20).all()
+    read_ids = {r.notification_id for r in db.query(UserNotificationRead).filter(
+        UserNotificationRead.user_id == current_user.id
+    ).all()}
+    return APIResponse(data=[{
+        "id": n.id,
+        "title": n.title,
+        "body": n.body,
+        "created_at": n.created_at.isoformat() if n.created_at else None,
+        "is_read": n.id in read_ids,
+    } for n in notifs])
+
+
+@router.post("/notifications/{notification_id}/read")
+def mark_notification_read(notification_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    from backend.models import UserNotificationRead
+    existing = db.query(UserNotificationRead).filter(
+        UserNotificationRead.user_id == current_user.id,
+        UserNotificationRead.notification_id == notification_id,
+    ).first()
+    if not existing:
+        db.add(UserNotificationRead(user_id=current_user.id, notification_id=notification_id))
+        db.commit()
+    return APIResponse(data={"message": "marked read"})

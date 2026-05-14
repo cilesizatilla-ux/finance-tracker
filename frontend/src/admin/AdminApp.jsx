@@ -9,6 +9,7 @@ import AdminAnalytics from './pages/AdminAnalytics.jsx'
 import AdminBenchmarks from './pages/AdminBenchmarks.jsx'
 import AdminAdmins from './pages/AdminAdmins.jsx'
 import AdminAuditLogs from './pages/AdminAuditLogs.jsx'
+import AdminNotifications from './pages/AdminNotifications.jsx'
 
 function LoadingSpinner() {
   return (
@@ -46,6 +47,7 @@ function AdminRoutes() {
         <Route path="benchmarks" element={<AdminBenchmarks />} />
         <Route path="admins" element={<AdminAdmins />} />
         <Route path="audit-logs" element={<AdminAuditLogs />} />
+        <Route path="notifications" element={<AdminNotifications />} />
       </Route>
     </Routes>
   )

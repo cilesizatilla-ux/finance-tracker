@@ -1057,3 +1057,39 @@ def impersonate_user(
     )
 
     return APIResponse(data={"token": token, "user_email": user.email})
+
+
+# ---------------------------------------------------------------------------
+# Notifications (broadcast)
+# ---------------------------------------------------------------------------
+
+class BroadcastPayload(BaseModel):
+    title: str
+    body: str
+
+@router.post("/notifications/broadcast")
+def broadcast_notification(
+    payload: BroadcastPayload,
+    db: Session = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    from backend.models import Notification
+    if not payload.title.strip():
+        raise HTTPException(status_code=422, detail="Title is required")
+    notif = Notification(title=payload.title.strip(), body=payload.body.strip() or None, created_by_id=admin.id)
+    db.add(notif)
+    db.add(AdminAuditLog(admin_id=admin.id, action="broadcast_notification", target_type="Notification", target_id=0, detail=payload.title))
+    db.commit()
+    return APIResponse(data={"message": "Notification broadcast", "id": notif.id})
+
+@router.get("/notifications")
+def list_admin_notifications(
+    db: Session = Depends(get_db),
+    _: AdminUser = Depends(get_current_admin),
+):
+    from backend.models import Notification
+    notifs = db.query(Notification).order_by(Notification.created_at.desc()).limit(50).all()
+    return APIResponse(data=[{
+        "id": n.id, "title": n.title, "body": n.body,
+        "created_at": n.created_at.isoformat() if n.created_at else None,
+    } for n in notifs])

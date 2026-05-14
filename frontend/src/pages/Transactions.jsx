@@ -500,7 +500,7 @@ function TransactionModal({ open, onClose, onSave, categories, parties, initial,
 function SkeletonRow() {
   return (
     <tr className="border-t" style={{ borderColor:'#334155' }}>
-      {[120,200,120,100,80,70,60].map((w,j) => (
+      {[24,120,200,120,100,80,70,60].map((w,j) => (
         <td key={j} className="px-4 py-3.5">
           <div className="h-3.5 rounded-lg bg-slate-700/50 animate-pulse" style={{ width:w }}/>
         </td>
@@ -536,6 +536,9 @@ export default function Transactions() {
   const [exporting, setExporting] = useState(false)
   const [confirmDeleteId, setConfirmDeleteId] = useState(null)
   const [viewMode, setViewMode] = useState('all') // 'all' | 'recurring'
+  const [selectedIds, setSelectedIds] = useState(new Set())
+  const [bulkCatId, setBulkCatId] = useState('')
+  const [bulkActionLoading, setBulkActionLoading] = useState(false)
 
   const showToast = (message, type='success') => setToast({ message, type })
 
@@ -575,6 +578,7 @@ export default function Transactions() {
       setTransactions(d?.data || d?.items || d || [])
       setTotal(d?.total ?? (Array.isArray(d?.data) ? d.data.length : Array.isArray(d) ? d.length : 0))
       setSummary(sumRes.data?.data || null)
+      setSelectedIds(new Set())
     } catch { showToast('Failed to load transactions.','error') }
     finally { setLoading(false) }
   }, [page, filters, filterParty, filterPaymentMethod, filterReconciled, viewMode])
@@ -657,6 +661,39 @@ export default function Transactions() {
   const handleCategoryCreated = (cat) => setCategories(prev => [...prev, cat].sort((a,b) => a.name.localeCompare(b.name)))
   const handlePartyCreated = (party) => setParties(prev => [...prev, party].sort((a,b) => a.name.localeCompare(b.name)))
 
+  async function handleBulkDelete() {
+    const count = selectedIds.size
+    if (!window.confirm(`Delete ${count} transaction(s)? This cannot be undone.`)) return
+    setBulkActionLoading(true)
+    try {
+      await Promise.all([...selectedIds].map(id => deleteTransaction(id)))
+      setSelectedIds(new Set())
+      await fetchTransactions()
+      setToast({ message: `Deleted ${count} transactions`, type: 'success' })
+    } catch {
+      setToast({ message: 'Some deletions failed', type: 'error' })
+    } finally {
+      setBulkActionLoading(false)
+    }
+  }
+
+  async function handleBulkRecategorize() {
+    if (!bulkCatId) return
+    const count = selectedIds.size
+    setBulkActionLoading(true)
+    try {
+      await Promise.all([...selectedIds].map(id => updateTransaction(id, { category_id: parseInt(bulkCatId) })))
+      setSelectedIds(new Set())
+      setBulkCatId('')
+      await fetchTransactions()
+      setToast({ message: `Updated category for ${count} transactions`, type: 'success' })
+    } catch {
+      setToast({ message: 'Some updates failed', type: 'error' })
+    } finally {
+      setBulkActionLoading(false)
+    }
+  }
+
   const openAdd = () => { setEditTarget(null); setModalOpen(true) }
   const openEdit = (tx) => {
     setEditTarget({
@@ -678,6 +715,20 @@ export default function Transactions() {
     if (av > bv) return sortDir === 'asc' ? 1 : -1
     return 0
   })
+
+  const allSelected = sortedTxns.length > 0 && sortedTxns.every(t => selectedIds.has(t.id))
+  const toggleAll = () => {
+    if (allSelected) setSelectedIds(new Set())
+    else setSelectedIds(new Set(sortedTxns.map(t => t.id)))
+  }
+  const toggleOne = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   const totalPages = Math.ceil(total/limit)
   const hasFilters = filters.start||filters.end||filters.category_id||filters.type!=='all'||filters.search
@@ -871,12 +922,58 @@ export default function Transactions() {
         </div>
       )}
 
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 mb-4 px-4 py-3 rounded-xl border" style={{ backgroundColor: '#1e293b', borderColor: '#6366f150' }}>
+          <span className="text-sm font-medium text-white">{selectedIds.size} selected</span>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            className="text-xs px-3 py-1.5 rounded-lg border"
+            style={{ borderColor: '#334155', color: '#94a3b8' }}
+          >Clear</button>
+          <div className="flex-1" />
+          <select
+            value={bulkCatId}
+            onChange={e => setBulkCatId(e.target.value)}
+            className="px-3 py-1.5 rounded-lg text-sm border outline-none"
+            style={{ backgroundColor: '#0f172a', borderColor: '#334155', color: '#94a3b8' }}
+          >
+            <option value="">Move to category…</option>
+            {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          {bulkCatId && (
+            <button
+              onClick={handleBulkRecategorize}
+              disabled={bulkActionLoading}
+              className="px-4 py-1.5 rounded-lg text-sm font-medium text-white disabled:opacity-50"
+              style={{ backgroundColor: '#6366f1' }}
+            >Apply</button>
+          )}
+          <button
+            onClick={handleBulkDelete}
+            disabled={bulkActionLoading}
+            className="px-4 py-1.5 rounded-lg text-sm font-medium disabled:opacity-50"
+            style={{ backgroundColor: '#ef444420', color: '#fca5a5', border: '1px solid #ef444450' }}
+          >
+            {bulkActionLoading ? 'Working…' : `Delete ${selectedIds.size}`}
+          </button>
+        </div>
+      )}
+
       {/* Table */}
       <div className="rounded-2xl border overflow-hidden" style={{ borderColor:'#334155' }}>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr style={{ backgroundColor:'#1e293b', borderBottom:'1px solid #334155' }}>
+                <th className="px-4 py-3 w-10">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={toggleAll}
+                    className="w-4 h-4 rounded accent-indigo-500 cursor-pointer"
+                  />
+                </th>
                 <th className="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider" style={{ color:'#64748b', cursor:'pointer', userSelect:'none' }} onClick={() => toggleSort('date')}>
                   Date {sortField === 'date' ? (sortDir === 'asc' ? '↑' : '↓') : <span style={{opacity:0.3}}>↕</span>}
                 </th>
@@ -897,7 +994,7 @@ export default function Transactions() {
               {loading ? (
                 Array.from({length:6}).map((_,i) => <SkeletonRow key={i}/>)
               ) : transactions.length===0 ? (
-                <tr><td colSpan={8}>
+                <tr><td colSpan={9}>
                   <div className="flex flex-col items-center justify-center py-16" style={{ color:'#64748b' }}>
                     <svg className="w-10 h-10 mb-3 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
@@ -908,7 +1005,15 @@ export default function Transactions() {
                 </td></tr>
               ) : (
                 sortedTxns.map(tx => (
-                  <tr key={tx.id} className="border-t transition-colors hover:bg-slate-800/50" style={{ borderColor:'#1e293b' }}>
+                  <tr key={tx.id} className="border-t transition-colors hover:bg-slate-800/50" style={{ borderColor:'#1e293b', backgroundColor: selectedIds.has(tx.id) ? '#6366f110' : 'transparent' }}>
+                    <td className="px-4 py-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(tx.id)}
+                        onChange={() => toggleOne(tx.id)}
+                        className="w-4 h-4 rounded accent-indigo-500 cursor-pointer"
+                      />
+                    </td>
                     <td className="px-4 py-3.5 whitespace-nowrap text-xs" style={{ color:'#64748b' }}>
                       {tx.date ? new Date(tx.date+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—'}
                     </td>

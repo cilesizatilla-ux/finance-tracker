@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext.jsx'
+import { getNotifications, markNotificationRead } from '../api/index.js'
 
 const NAV_SECTIONS = [
   {
@@ -91,13 +92,38 @@ const NAV_SECTIONS = [
         )
       }
     ]
+  },
+  {
+    label: 'ACCOUNT',
+    items: [
+      {
+        to: '/settings',
+        label: 'Settings',
+        end: false,
+        icon: (
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75}
+              d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        )
+      }
+    ]
   }
 ]
 
 export default function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [notifs, setNotifs] = useState([])
+  const [bellOpen, setBellOpen] = useState(false)
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+
+  useEffect(() => {
+    const load = () => getNotifications().then(r => setNotifs(r.data?.data || [])).catch(() => {})
+    load()
+    const id = setInterval(load, 60000)
+    return () => clearInterval(id)
+  }, [])
 
   const handleLogout = () => {
     logout()
@@ -216,7 +242,7 @@ export default function Layout() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-1">
             <div className="w-6 h-6 rounded-md bg-indigo-600 flex items-center justify-center">
               <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -224,6 +250,59 @@ export default function Layout() {
               </svg>
             </div>
             <span className="font-bold text-white text-sm">FinanceTrack</span>
+          </div>
+          {/* Bell */}
+          <div className="relative">
+            <button
+              onClick={() => setBellOpen(b => !b)}
+              className="w-9 h-9 rounded-xl flex items-center justify-center relative"
+              style={{ backgroundColor: '#1e293b', border: '1px solid #334155' }}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color: '#94a3b8' }}>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+              </svg>
+              {notifs.filter(n => !n.is_read).length > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-xs flex items-center justify-center font-bold text-white" style={{ backgroundColor: '#ef4444' }}>
+                  {notifs.filter(n => !n.is_read).length}
+                </span>
+              )}
+            </button>
+            {bellOpen && (
+              <div className="absolute right-0 top-11 w-80 rounded-2xl border shadow-2xl z-50" style={{ backgroundColor: '#1e293b', borderColor: '#334155' }}>
+                <div className="px-4 py-3 border-b flex items-center justify-between" style={{ borderColor: '#334155' }}>
+                  <span className="text-sm font-semibold text-white">Notifications</span>
+                  <button onClick={() => setBellOpen(false)} className="text-xs" style={{ color: '#64748b' }}>Close</button>
+                </div>
+                {notifs.length === 0 ? (
+                  <div className="px-4 py-6 text-center text-sm" style={{ color: '#64748b' }}>No notifications</div>
+                ) : (
+                  <div className="max-h-80 overflow-y-auto divide-y" style={{ divideColor: '#334155' }}>
+                    {notifs.map(n => (
+                      <div
+                        key={n.id}
+                        className="px-4 py-3 cursor-pointer hover:bg-slate-700/30"
+                        style={{ backgroundColor: n.is_read ? 'transparent' : '#6366f108' }}
+                        onClick={() => {
+                          if (!n.is_read) {
+                            markNotificationRead(n.id).catch(() => {})
+                            setNotifs(prev => prev.map(x => x.id === n.id ? { ...x, is_read: true } : x))
+                          }
+                        }}
+                      >
+                        <div className="flex items-start gap-2">
+                          {!n.is_read && <span className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0" style={{ backgroundColor: '#6366f1' }} />}
+                          <div className={n.is_read ? 'ml-4' : ''}>
+                            <p className="text-sm font-medium text-white">{n.title}</p>
+                            {n.body && <p className="text-xs mt-0.5" style={{ color: '#94a3b8' }}>{n.body}</p>}
+                            <p className="text-xs mt-1" style={{ color: '#475569' }}>{n.created_at ? new Date(n.created_at).toLocaleDateString() : ''}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </header>
 

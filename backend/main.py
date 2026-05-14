@@ -19,6 +19,7 @@ from backend.models import SharedReport  # noqa: F401
 from backend.models import Transaction  # noqa: F401
 from backend.models import User  # noqa: F401
 from backend.models import UserProfile  # noqa: F401
+from backend.models import Notification, UserNotificationRead  # noqa
 from backend.routers import analyze, categories, chat, reports, transactions
 from backend.routers import auth as auth_router
 from backend.routers import extract, parties, shared

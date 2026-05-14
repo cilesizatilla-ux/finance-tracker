@@ -3,6 +3,7 @@ from sqlalchemy import (
     Boolean, Column, Date, DateTime, ForeignKey,
     Integer, String, Text, event
 )
+from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from backend.database import Base
 
@@ -143,3 +144,19 @@ class UserProfile(Base):
     suspended_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+    id = Column(Integer, primary_key=True)
+    title = Column(String, nullable=False)
+    body = Column(Text, nullable=True)
+    created_by_id = Column(Integer, ForeignKey("admin_users.id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class UserNotificationRead(Base):
+    __tablename__ = "user_notification_reads"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    notification_id = Column(Integer, ForeignKey("notifications.id"), nullable=False)
+    read_at = Column(DateTime(timezone=True), server_default=func.now())
