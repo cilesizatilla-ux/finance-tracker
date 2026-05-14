@@ -20,10 +20,12 @@ from backend.models import Transaction  # noqa: F401
 from backend.models import User  # noqa: F401
 from backend.models import UserProfile  # noqa: F401
 from backend.models import Notification, UserNotificationRead  # noqa
+from backend.models import AuditEntry, AuditAssignment, AuditExpense  # noqa
 from backend.routers import analyze, categories, chat, reports, transactions
 from backend.routers import auth as auth_router
 from backend.routers import extract, parties, shared
 from backend.routers import admin as admin_router
+from backend.routers.audit import audit_router, admin_audit_router
 
 # ---------------------------------------------------------------------------
 # App setup
@@ -170,6 +172,8 @@ app.include_router(extract.router, prefix="/api/v1", dependencies=_auth_dep)
 # shared router has its own mixed auth (POST is protected, GET is public)
 app.include_router(shared.router, prefix="/api/v1")
 app.include_router(admin_router.router, prefix="/api/v1")
+app.include_router(audit_router, prefix="/api/v1")
+app.include_router(admin_audit_router, prefix="/api/v1")
 
 # ---------------------------------------------------------------------------
 # Static file serving for uploaded receipts

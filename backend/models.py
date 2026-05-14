@@ -160,3 +160,49 @@ class UserNotificationRead(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     notification_id = Column(Integer, ForeignKey("notifications.id"), nullable=False)
     read_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class AuditEntry(Base):
+    __tablename__ = "audit_entries"
+    id = Column(Integer, primary_key=True, index=True)
+    client_name = Column(String, nullable=False)
+    company_name = Column(String, nullable=False)
+    audit_date = Column(Date, nullable=False)
+    duration_days = Column(Integer, nullable=False, default=1)
+    notes = Column(Text, nullable=True)
+    location = Column(String, nullable=True)
+    status = Column(String, default="scheduled")  # scheduled, in_progress, completed, cancelled
+    created_by_id = Column(Integer, ForeignKey("admin_users.id"), nullable=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    assignments = relationship("AuditAssignment", back_populates="audit_entry", cascade="all, delete-orphan")
+    expenses = relationship("AuditExpense", back_populates="audit_entry", cascade="all, delete-orphan")
+
+class AuditAssignment(Base):
+    __tablename__ = "audit_assignments"
+    id = Column(Integer, primary_key=True, index=True)
+    audit_id = Column(Integer, ForeignKey("audit_entries.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    role = Column(String, default="auditor")  # auditor, lead, reviewer
+    assigned_at = Column(DateTime, default=func.now())
+    audit_entry = relationship("AuditEntry", back_populates="assignments")
+    user = relationship("User")
+
+class AuditExpense(Base):
+    __tablename__ = "audit_expenses"
+    id = Column(Integer, primary_key=True, index=True)
+    audit_id = Column(Integer, ForeignKey("audit_entries.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    amount_cents = Column(Integer, nullable=False)
+    currency = Column(String, default="USD")
+    description = Column(String, nullable=False)
+    category = Column(String, default="other")  # travel, accommodation, meals, transportation, supplies, other
+    expense_date = Column(Date, nullable=False)
+    status = Column(String, default="pending")  # pending, approved, rejected
+    review_note = Column(Text, nullable=True)
+    reviewed_by_id = Column(Integer, ForeignKey("admin_users.id"), nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    submitted_at = Column(DateTime, default=func.now())
+    audit_entry = relationship("AuditEntry", back_populates="expenses")
+    user = relationship("User", foreign_keys=[user_id])
+    reviewer = relationship("AdminUser", foreign_keys=[reviewed_by_id])

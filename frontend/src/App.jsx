@@ -15,6 +15,8 @@ import SharedReportView from './pages/SharedReportView.jsx'
 import AuthCallback from './pages/AuthCallback.jsx'
 import AdminApp from './admin/AdminApp.jsx'
 import Settings from './pages/Settings.jsx'
+import AuditCalendar from './pages/AuditCalendar.jsx'
+import AuditExpenses from './pages/AuditExpenses.jsx'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -61,6 +63,8 @@ function AppRoutes() {
         <Route path="parties" element={<Parties />} />
         <Route path="reports" element={<Reports />} />
         <Route path="settings" element={<Settings />} />
+        <Route path="audit-calendar" element={<AuditCalendar />} />
+        <Route path="audit-expenses" element={<AuditExpenses />} />
       </Route>
     </Routes>
   )

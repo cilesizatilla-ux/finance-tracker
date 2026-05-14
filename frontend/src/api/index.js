@@ -1,4 +1,5 @@
 import axios from 'axios'
+import adminApi from '../admin/adminApi.js'
 
 const api = axios.create({
   baseURL: '/api/v1',
@@ -130,5 +131,26 @@ export const updateProfile = (data) => api.patch('/auth/profile', data)
 
 export const getNotifications = () => api.get('/auth/notifications')
 export const markNotificationRead = (id) => api.post(`/auth/notifications/${id}/read`)
+
+// Audit Calendar (user)
+export const getAuditEntries = (params = {}) => api.get('/audit/entries', { params })
+export const getAuditEntry = (id) => api.get(`/audit/entries/${id}`)
+export const downloadAuditIcal = (id) => api.get(`/audit/entries/${id}/ical`, { responseType: 'blob' })
+export const downloadAuditCalendar = () => api.get('/audit/calendar.ics', { responseType: 'blob' })
+export const getMyExpenses = (params = {}) => api.get('/audit/my-expenses', { params })
+export const submitExpense = (entryId, payload) => api.post(`/audit/entries/${entryId}/expenses`, payload)
+export const updateExpense = (id, payload) => api.patch(`/audit/expenses/${id}`, payload)
+export const deleteExpense = (id) => api.delete(`/audit/expenses/${id}`)
+
+// Admin Audit Calendar
+export const adminGetAuditEntries = (params = {}) => adminApi.get('/audit/entries', { params })
+export const adminCreateAuditEntry = (payload) => adminApi.post('/audit/entries', payload)
+export const adminUpdateAuditEntry = (id, payload) => adminApi.put(`/audit/entries/${id}`, payload)
+export const adminDeleteAuditEntry = (id) => adminApi.delete(`/audit/entries/${id}`)
+export const adminAssignAuditor = (entryId, payload) => adminApi.post(`/audit/entries/${entryId}/assign`, payload)
+export const adminUnassignAuditor = (entryId, userId) => adminApi.delete(`/audit/entries/${entryId}/assign/${userId}`)
+export const adminGetAllExpenses = (params = {}) => adminApi.get('/audit/expenses', { params })
+export const adminReviewExpense = (id, payload) => adminApi.post(`/audit/expenses/${id}/review`, payload)
+export const adminListUsers = (params = {}) => adminApi.get('/users', { params })
 
 export default api
