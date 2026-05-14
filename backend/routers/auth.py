@@ -274,3 +274,90 @@ def mark_notification_read(notification_id: int, current_user: User = Depends(ge
         db.add(UserNotificationRead(user_id=current_user.id, notification_id=notification_id))
         db.commit()
     return APIResponse(data={"message": "marked read"})
+
+
+class PasswordChangePayload(PydanticBase):
+    current_password: str
+    new_password: str
+
+
+@router.post("/change-password")
+def change_password(
+    payload: PasswordChangePayload,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    # Check if user has a password (non-OAuth users)
+    if not current_user.password_hash:
+        raise HTTPException(status_code=400, detail="OAuth users cannot change password here")
+
+    # Verify current password using the existing verify_password helper
+    if not verify_password(payload.current_password, current_user.password_hash):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+
+    if len(payload.new_password) < 8:
+        raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
+
+    current_user.password_hash = hash_password(payload.new_password)
+    db.commit()
+    return {"ok": True, "message": "Password updated successfully"}
+
+
+@router.get("/export-data")
+def export_user_data(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from backend.models import Transaction, Category, Party, UserProfile
+    from sqlalchemy.orm import joinedload
+
+    transactions = (
+        db.query(Transaction)
+        .options(joinedload(Transaction.category))
+        .filter(Transaction.user_id == current_user.id, Transaction.deleted_at.is_(None))
+        .order_by(Transaction.date.desc())
+        .all()
+    )
+    categories = db.query(Category).filter(Category.user_id == current_user.id).all()
+    parties = db.query(Party).filter(Party.user_id == current_user.id).all()
+    profile = db.query(UserProfile).filter(UserProfile.user_id == current_user.id).first()
+
+    party_cache: dict = {}
+    def get_party_name(party_id):
+        if party_id is None:
+            return None
+        if party_id not in party_cache:
+            p = db.query(Party).filter(Party.id == party_id).first()
+            party_cache[party_id] = p.name if p else None
+        return party_cache[party_id]
+
+    data = {
+        "exported_at": datetime.utcnow().isoformat(),
+        "user": {
+            "id": current_user.id,
+            "name": current_user.name,
+            "email": current_user.email,
+            "created_at": current_user.created_at.isoformat() if current_user.created_at else None,
+        },
+        "profile": {
+            "currency": profile.currency if profile else None,
+            "country": profile.country if profile else None,
+            "financial_goal": profile.financial_goal if profile else None,
+        } if profile else {},
+        "transactions": [
+            {
+                "date": t.date.isoformat() if t.date else None,
+                "description": t.description,
+                "amount_cents": t.amount_cents,
+                "type": "income" if t.is_income else "expense",
+                "category": t.category.name if t.category else None,
+                "party": get_party_name(t.party_id),
+                "payment_method": t.payment_method,
+                "notes": t.notes,
+            }
+            for t in transactions
+        ],
+        "categories": [{"name": c.name, "budget_cents": c.budget_cents} for c in categories],
+        "parties": [{"name": p.name, "type": p.party_type} for p in parties],
+    }
+    return data

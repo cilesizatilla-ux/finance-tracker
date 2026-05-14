@@ -128,6 +128,8 @@ export const deleteShare = (id) =>
 
 export const getProfile = () => api.get('/auth/profile')
 export const updateProfile = (data) => api.patch('/auth/profile', data)
+export const changePassword = (payload) => api.post('/auth/change-password', payload)
+export const exportUserData = () => api.get('/auth/export-data')
 
 export const getNotifications = () => api.get('/auth/notifications')
 export const markNotificationRead = (id) => api.post(`/auth/notifications/${id}/read`)

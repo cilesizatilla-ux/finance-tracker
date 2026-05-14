@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts'
-import { getCashflow, getBudgetStatus, getTransactions, getTopCategories } from '../api/index.js'
+import { getCashflow, getBudgetStatus, getTransactions, getTopCategories, getCategories } from '../api/index.js'
 import CurrencyAmount from '../components/CurrencyAmount.jsx'
 import OnboardingWizard from '../components/OnboardingWizard.jsx'
 
@@ -85,6 +85,15 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
+  // Widget A: Upcoming Recurring Bills
+  const [upcomingRecurring, setUpcomingRecurring] = useState([])
+  const [recurringLoading, setRecurringLoading] = useState(true)
+
+  // Widget B: Budget vs Actual
+  const [budgetCategories, setBudgetCategories] = useState([])
+  const [catSpending, setCatSpending] = useState({})
+  const [budgetVsActualLoading, setBudgetVsActualLoading] = useState(true)
+
   useEffect(() => {
     const fetchAll = async () => {
       const now = new Date()
@@ -110,6 +119,57 @@ export default function Dashboard() {
       }
     }
     fetchAll()
+  }, [])
+
+  // Widget A: fetch recurring transactions
+  useEffect(() => {
+    const fetchRecurring = async () => {
+      try {
+        const res = await getTransactions({ limit: 20 })
+        const all = res.data?.data || res.data || []
+        const recurring = all.filter(t => t.is_recurring || t.recurring_template_id)
+        setUpcomingRecurring(recurring.slice(0, 5))
+      } catch {
+        setUpcomingRecurring([])
+      } finally {
+        setRecurringLoading(false)
+      }
+    }
+    fetchRecurring()
+  }, [])
+
+  // Widget B: fetch categories with budgets + current month transactions for spending
+  useEffect(() => {
+    const fetchBudgetVsActual = async () => {
+      try {
+        const now = new Date()
+        const [catsRes, txRes] = await Promise.all([
+          getCategories(),
+          getTransactions({ month: now.getMonth() + 1, year: now.getFullYear(), limit: 500 }),
+        ])
+        const cats = catsRes.data?.data || catsRes.data || []
+        const txList = txRes.data?.data || txRes.data || []
+
+        // Compute spending per category for current month
+        const spentByCategory = {}
+        txList.forEach(t => {
+          if ((t.type === 'expense' || t.is_income === false) && t.category_id) {
+            spentByCategory[t.category_id] = (spentByCategory[t.category_id] || 0) + (t.amount_cents || 0)
+          }
+        })
+
+        // Filter to categories with a budget set
+        const withBudget = cats.filter(c => c.budget_cents > 0).slice(0, 6)
+        setBudgetCategories(withBudget)
+        setCatSpending(spentByCategory)
+      } catch {
+        setBudgetCategories([])
+        setCatSpending({})
+      } finally {
+        setBudgetVsActualLoading(false)
+      }
+    }
+    fetchBudgetVsActual()
   }, [])
 
   const now = new Date()
@@ -363,6 +423,181 @@ export default function Dashboard() {
           <span>Budget: {categoryCount >= 3 ? '✓' : '○'} {categoryCount >= 5 ? 30 : categoryCount >= 3 ? 20 : categoryCount >= 1 ? 10 : 0}/30 pts</span>
           <span>History: {monthsWithData >= 3 ? '✓' : '○'} {monthsWithData >= 6 ? 30 : monthsWithData >= 3 ? 20 : monthsWithData >= 1 ? 10 : 0}/30 pts</span>
         </div>
+      </div>
+
+      {/* Widget Row: Recurring Bills + Budget vs Actual */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        {/* Widget A: Recurring Bills */}
+        <div className="rounded-2xl border shadow-sm" style={{ backgroundColor: '#1e293b', borderColor: '#334155' }}>
+          <div className="px-6 pt-5 pb-4 border-b flex items-center justify-between" style={{ borderColor: '#334155' }}>
+            <div>
+              <h2 className="text-base font-semibold text-white">Recurring Bills</h2>
+              <p className="text-xs mt-0.5" style={{ color: '#94a3b8' }}>Recent recurring transactions</p>
+            </div>
+            <Link
+              to="/transactions"
+              className="flex items-center gap-1 text-xs font-medium transition-colors"
+              style={{ color: '#818cf8' }}
+            >
+              View all
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </Link>
+          </div>
+          <div className="p-5">
+            {recurringLoading ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="flex items-center justify-between gap-3">
+                    <div className="flex-1 space-y-1.5">
+                      <div className="animate-pulse rounded bg-slate-700/40 h-3.5 w-3/4" />
+                      <div className="animate-pulse rounded bg-slate-700/40 h-2.5 w-1/3" />
+                    </div>
+                    <div className="animate-pulse rounded bg-slate-700/40 h-4 w-16" />
+                  </div>
+                ))}
+              </div>
+            ) : upcomingRecurring.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10" style={{ color: '#64748b' }}>
+                <svg className="w-9 h-9 mb-3 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <p className="text-sm mb-2">No recurring transactions set up</p>
+                <Link to="/transactions" className="text-xs font-medium" style={{ color: '#818cf8' }}>
+                  Add a transaction
+                </Link>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {upcomingRecurring.map((t) => {
+                  const isExpense = !t.is_income && t.type !== 'income'
+                  const amountColor = isExpense ? '#f87171' : '#4ade80'
+                  const amountCents = isExpense ? -Math.abs(t.amount_cents || 0) : (t.amount_cents || 0)
+                  const freq = t.frequency || t.recurrence_interval || 'monthly'
+                  return (
+                    <div key={t.id} className="flex items-center justify-between gap-3 py-1.5 border-b last:border-0" style={{ borderColor: '#1e3a5f22' }}>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-white truncate">{t.description}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          {t.category_name && (
+                            <span
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium"
+                              style={{ backgroundColor: '#0f172a', color: '#94a3b8' }}
+                            >
+                              {t.category_color && (
+                                <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: t.category_color }} />
+                              )}
+                              {t.category_name}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                        <span className="text-sm font-semibold" style={{ color: amountColor }}>
+                          <CurrencyAmount cents={amountCents} />
+                        </span>
+                        <span
+                          className="text-[10px] font-medium px-1.5 py-0.5 rounded-full"
+                          style={{ backgroundColor: '#1e3a5f', color: '#818cf8' }}
+                        >
+                          {freq}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Widget B: Budget vs Actual (this month) */}
+        <div className="rounded-2xl border shadow-sm" style={{ backgroundColor: '#1e293b', borderColor: '#334155' }}>
+          <div className="px-6 pt-5 pb-4 border-b flex items-center justify-between" style={{ borderColor: '#334155' }}>
+            <div>
+              <h2 className="text-base font-semibold text-white">Budget Status</h2>
+              <p className="text-xs mt-0.5" style={{ color: '#94a3b8' }}>Spending vs. limits this month</p>
+            </div>
+            <Link
+              to="/budget"
+              className="flex items-center gap-1 text-xs font-medium transition-colors"
+              style={{ color: '#818cf8' }}
+            >
+              Manage
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </Link>
+          </div>
+          <div className="p-5">
+            {budgetVsActualLoading ? (
+              <div className="space-y-4">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="space-y-2">
+                    <div className="flex justify-between">
+                      <div className="animate-pulse rounded bg-slate-700/40 h-3 w-24" />
+                      <div className="animate-pulse rounded bg-slate-700/40 h-3 w-16" />
+                    </div>
+                    <div className="animate-pulse rounded-full bg-slate-700/40 h-1.5 w-full" />
+                  </div>
+                ))}
+              </div>
+            ) : budgetCategories.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10" style={{ color: '#64748b' }}>
+                <svg className="w-9 h-9 mb-3 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                    d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />
+                </svg>
+                <p className="text-sm mb-2">No budgets set</p>
+                <Link to="/budget" className="text-xs font-medium" style={{ color: '#818cf8' }}>
+                  Set spending limits
+                </Link>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {budgetCategories.map((cat) => {
+                  const spent = catSpending[cat.id] || 0
+                  const pct = (spent / cat.budget_cents) * 100
+                  const barColor = pct >= 100 ? '#ef4444' : pct >= 70 ? '#f59e0b' : '#10b981'
+                  const labelColor = pct >= 100 ? '#f87171' : pct >= 70 ? '#fbbf24' : '#34d399'
+                  return (
+                    <div key={cat.id}>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="flex items-center gap-2">
+                          {cat.color && (
+                            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: cat.color }} />
+                          )}
+                          <span className="text-sm font-medium text-white">{cat.name}</span>
+                        </div>
+                        <span className="text-xs font-semibold" style={{ color: labelColor }}>
+                          {pct >= 100 ? 'Over budget' : `${Math.round(pct)}%`}
+                        </span>
+                      </div>
+                      <div className="w-full rounded-full h-1.5" style={{ backgroundColor: '#334155' }}>
+                        <div
+                          className="h-1.5 rounded-full transition-all duration-500"
+                          style={{ width: `${Math.min(pct, 100)}%`, backgroundColor: barColor }}
+                        />
+                      </div>
+                      <div className="flex justify-between mt-1">
+                        <span className="text-xs" style={{ color: '#64748b' }}>
+                          <CurrencyAmount cents={spent} className="text-xs" /> spent
+                        </span>
+                        <span className="text-xs" style={{ color: '#64748b' }}>
+                          of <CurrencyAmount cents={cat.budget_cents} className="text-xs" />
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
       </div>
 
       {/* Cash Flow Chart */}

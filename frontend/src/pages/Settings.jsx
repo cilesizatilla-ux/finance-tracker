@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getProfile, updateProfile } from '../api/index.js'
+import { getProfile, updateProfile, changePassword, exportUserData } from '../api/index.js'
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'TRY', 'JPY', 'CAD', 'AUD', 'CHF', 'INR', 'BRL']
 
@@ -75,6 +75,15 @@ export default function Settings() {
   const [saved, setSaved] = useState(false)
   const [saveError, setSaveError] = useState(null)
 
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [pwLoading, setPwLoading] = useState(false)
+  const [pwError, setPwError] = useState(null)
+  const [pwSaved, setPwSaved] = useState(false)
+
+  const [exportingData, setExportingData] = useState(false)
+
   const [form, setForm] = useState({
     name: '',
     email: '',
@@ -125,6 +134,50 @@ export default function Settings() {
       setSaveError('Failed to save changes. Please try again.')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handlePasswordChange = async () => {
+    setPwError(null)
+    setPwSaved(false)
+    if (newPassword !== confirmPassword) {
+      setPwError('Passwords do not match')
+      return
+    }
+    if (newPassword.length < 8) {
+      setPwError('New password must be at least 8 characters')
+      return
+    }
+    setPwLoading(true)
+    try {
+      await changePassword({ current_password: currentPassword, new_password: newPassword })
+      setPwSaved(true)
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+      setTimeout(() => setPwSaved(false), 3000)
+    } catch (err) {
+      setPwError(err.response?.data?.detail || 'Failed to update password')
+    } finally {
+      setPwLoading(false)
+    }
+  }
+
+  const handleDataExport = async () => {
+    setExportingData(true)
+    try {
+      const res = await exportUserData()
+      const json = JSON.stringify(res.data, null, 2)
+      const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'my-finance-data.json'
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      // export failed silently
+    } finally {
+      setExportingData(false)
     }
   }
 
@@ -297,6 +350,82 @@ export default function Settings() {
         {saveError && (
           <span className="text-sm" style={{ color: '#f87171' }}>{saveError}</span>
         )}
+      </div>
+
+      {/* Change Password */}
+      <div className="bg-slate-800 rounded-2xl border border-slate-700 p-6 mb-6">
+        <h2 className="text-base font-semibold text-white mb-4">Change Password</h2>
+        <div className="space-y-3 max-w-md">
+          <div>
+            <label className="block text-xs font-medium text-slate-400 mb-1">Current Password</label>
+            <input
+              type="password"
+              value={currentPassword}
+              onChange={e => setCurrentPassword(e.target.value)}
+              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+              placeholder="Enter current password"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-400 mb-1">New Password</label>
+            <input
+              type="password"
+              value={newPassword}
+              onChange={e => setNewPassword(e.target.value)}
+              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+              placeholder="At least 8 characters"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-400 mb-1">Confirm New Password</label>
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={e => setConfirmPassword(e.target.value)}
+              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+              placeholder="Repeat new password"
+            />
+          </div>
+          <div className="flex items-center gap-4 pt-1">
+            <button
+              onClick={handlePasswordChange}
+              disabled={pwLoading}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
+            >
+              {pwLoading ? 'Updating…' : 'Update Password'}
+            </button>
+            {pwSaved && (
+              <span className="flex items-center gap-1.5 text-sm font-medium" style={{ color: '#4ade80' }}>
+                <svg style={{ width: 16, height: 16 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                </svg>
+                Password updated
+              </span>
+            )}
+            {pwError && (
+              <span className="text-sm" style={{ color: '#f87171' }}>{pwError}</span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Data & Privacy */}
+      <div className="bg-slate-800 rounded-2xl border border-slate-700 p-6 mb-8">
+        <h2 className="text-base font-semibold text-white mb-1">Data & Privacy</h2>
+        <p className="text-sm text-slate-400 mb-4">Export or delete your account data</p>
+        <div className="flex flex-wrap gap-3">
+          <button
+            onClick={handleDataExport}
+            disabled={exportingData}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            {exportingData ? 'Preparing…' : 'Download My Data'}
+          </button>
+        </div>
       </div>
     </div>
   )
