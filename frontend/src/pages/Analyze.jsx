@@ -47,9 +47,19 @@ export default function Analyze() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [aiConfigured, setAiConfigured] = useState(true)
+  const [cachedAt, setCachedAt] = useState(null)
+  const [justRan, setJustRan] = useState(false)
 
   useEffect(() => {
     getStatus().then(r => setAiConfigured(r.data?.ai_configured !== false)).catch(() => {})
+    const cached = localStorage.getItem('ft_last_analysis')
+    if (cached) {
+      try {
+        const { result: r, timestamp: ts } = JSON.parse(cached)
+        setResult(r)
+        setCachedAt(ts)
+      } catch {}
+    }
   }, [])
 
   const handleAnalyze = async () => {
@@ -57,7 +67,11 @@ export default function Analyze() {
     setError(null)
     try {
       const res = await runAnalysis()
-      setResult(res.data?.data || res.data)
+      const analysisResult = res.data?.data || res.data
+      setResult(analysisResult)
+      setJustRan(true)
+      setCachedAt(Date.now())
+      localStorage.setItem('ft_last_analysis', JSON.stringify({ result: analysisResult, timestamp: Date.now() }))
     } catch (err) {
       setError(err.response?.data?.detail || 'Analysis failed. Make sure the backend is running.')
     } finally {
@@ -160,6 +174,14 @@ export default function Analyze() {
               <div className="h-3 w-3/4 rounded bg-slate-700/50" />
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Cached analysis banner */}
+      {cachedAt && !justRan && result && !loading && (
+        <div style={{ color: '#64748b', fontSize: 12, marginBottom: 12 }}>
+          Last analyzed: {new Date(cachedAt).toLocaleString()} —{' '}
+          <button onClick={handleAnalyze} style={{ color: '#6366f1', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12 }}>Re-run</button>
         </div>
       )}
 

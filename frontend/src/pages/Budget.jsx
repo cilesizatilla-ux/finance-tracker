@@ -367,12 +367,36 @@ export default function Budget() {
   const [activeTab, setActiveTab] = useState('expense')
   const [toast, setToast] = useState(null)
 
+  const now = new Date()
+  const [viewMonth, setViewMonth] = useState(now.getMonth() + 1)
+  const [viewYear, setViewYear] = useState(now.getFullYear())
+
+  const isCurrentMonth = viewMonth === now.getMonth() + 1 && viewYear === now.getFullYear()
+
+  const navBtnStyle = {
+    background: '#1e293b', border: '1px solid #334155', color: '#94a3b8',
+    borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 14
+  }
+
+  const prevMonth = () => {
+    if (viewMonth === 1) { setViewMonth(12); setViewYear(y => y - 1) }
+    else setViewMonth(m => m - 1)
+  }
+  const nextMonth = () => {
+    if (isCurrentMonth) return
+    if (viewMonth === 12) { setViewMonth(1); setViewYear(y => y + 1) }
+    else setViewMonth(m => m + 1)
+  }
+
   const showToast = (msg, type = 'success') => setToast({ message: msg, type })
 
-  const fetchData = async () => {
+  const fetchData = async (month, year) => {
     setLoading(true)
     try {
-      const [catRes, budRes] = await Promise.all([getCategories(), getBudgetStatus()])
+      const [catRes, budRes] = await Promise.all([
+        getCategories(),
+        getBudgetStatus({ month, year })
+      ])
       setCategories(catRes.data?.data || catRes.data || [])
       setBudgetStatus(budRes.data?.data || budRes.data || [])
     } catch {
@@ -382,7 +406,7 @@ export default function Budget() {
     }
   }
 
-  useEffect(() => { fetchData() }, [])
+  useEffect(() => { fetchData(viewMonth, viewYear) }, [viewMonth, viewYear])
 
   const handleAdd = async (data) => {
     try {
@@ -390,7 +414,7 @@ export default function Budget() {
       if (res.data?.error) { showToast(res.data.error, 'error'); return }
       showToast('Category added.')
       setShowAddForm(false)
-      fetchData()
+      fetchData(viewMonth, viewYear)
     } catch {
       showToast('Failed to add category.', 'error')
     }
@@ -401,7 +425,7 @@ export default function Budget() {
       const res = await updateCategory(id, data)
       if (res.data?.error) { showToast(res.data.error, 'error'); return }
       showToast('Budget updated.')
-      fetchData()
+      fetchData(viewMonth, viewYear)
     } catch {
       showToast('Failed to update budget.', 'error')
     }
@@ -412,7 +436,7 @@ export default function Budget() {
       const res = await deleteCategory(id)
       if (res.data?.error) { showToast(res.data.error, 'error'); return }
       showToast('Category deleted.')
-      fetchData()
+      fetchData(viewMonth, viewYear)
     } catch {
       showToast('Failed to delete category.', 'error')
     }
@@ -439,23 +463,39 @@ export default function Budget() {
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
       {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex items-start justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white">Budget</h1>
           <p className="text-sm mt-1" style={{ color: '#94a3b8' }}>Track spending against your monthly limits</p>
         </div>
-        {!showAddForm && (
-          <button
-            onClick={() => setShowAddForm(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors shadow-lg shadow-indigo-500/20"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Add Category
-          </button>
-        )}
+        <div className="flex items-center gap-3 flex-wrap">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button onClick={prevMonth} style={navBtnStyle}>‹</button>
+            <span style={{ color: '#f1f5f9', fontSize: 14, fontWeight: 600, minWidth: 120, textAlign: 'center' }}>
+              {new Date(viewYear, viewMonth - 1).toLocaleString('en-US', { month: 'long', year: 'numeric' })}
+            </span>
+            <button onClick={nextMonth} style={{ ...navBtnStyle, opacity: isCurrentMonth ? 0.4 : 1 }} disabled={isCurrentMonth}>›</button>
+          </div>
+          {!showAddForm && (
+            <button
+              onClick={() => setShowAddForm(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors shadow-lg shadow-indigo-500/20"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Add Category
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Past month banner */}
+      {!isCurrentMonth && (
+        <div style={{ backgroundColor: '#f59e0b20', border: '1px solid #f59e0b40', color: '#fbbf24', borderRadius: 8, padding: '8px 14px', fontSize: 12, marginBottom: 16 }}>
+          Viewing {new Date(viewYear, viewMonth - 1).toLocaleString('en-US', { month: 'long', year: 'numeric' })} — read-only snapshot
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-1 p-1 rounded-xl w-fit" style={{ backgroundColor: '#1e293b' }}>
@@ -569,7 +609,7 @@ export default function Budget() {
             <h2 className="text-base font-semibold text-white">
               {isIncome ? 'Income' : 'Spending'} Distribution
             </h2>
-            <p className="text-xs mt-0.5" style={{ color: '#94a3b8' }}>By category (current month)</p>
+            <p className="text-xs mt-0.5" style={{ color: '#94a3b8' }}>By category ({new Date(viewYear, viewMonth - 1).toLocaleString('en-US', { month: 'long', year: 'numeric' })})</p>
           </div>
           <div className="p-6">
             {loading ? (

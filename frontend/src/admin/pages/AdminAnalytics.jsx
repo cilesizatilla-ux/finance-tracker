@@ -62,29 +62,40 @@ export default function AdminAnalytics() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [anomalyPage, setAnomalyPage] = useState(0)
+  const [trendMonths, setTrendMonths] = useState(12)
   const ANOMALY_PAGE_SIZE = 20
 
   useEffect(() => {
-    async function fetchAll() {
+    async function fetchStatic() {
       try {
-        const [catRes, pmRes, anomRes, trRes] = await Promise.all([
+        const [catRes, pmRes, anomRes] = await Promise.all([
           adminApi.get('/analytics/categories'),
           adminApi.get('/analytics/payment-methods'),
           adminApi.get('/analytics/anomalies'),
-          adminApi.get('/analytics/trends?months=12'),
         ])
         setCategories(catRes.data?.data || catRes.data || [])
         setPaymentMethods(pmRes.data?.data || pmRes.data || [])
         setAnomalies(anomRes.data?.data || anomRes.data || [])
-        setTrends(trRes.data?.data || trRes.data || [])
       } catch {
         setError('Failed to load analytics data.')
       } finally {
         setLoading(false)
       }
     }
-    fetchAll()
+    fetchStatic()
   }, [])
+
+  useEffect(() => {
+    async function fetchTrends() {
+      try {
+        const trRes = await adminApi.get(`/analytics/trends?months=${trendMonths}`)
+        setTrends(trRes.data?.data || trRes.data || [])
+      } catch {
+        setError('Failed to load trend data.')
+      }
+    }
+    fetchTrends()
+  }, [trendMonths])
 
   if (loading) {
     return (
@@ -285,8 +296,19 @@ export default function AdminAnalytics() {
 
       {/* 4. Platform Trends */}
       <section>
-        <SectionHeader title="Platform Trends (12 Months)" subtitle="Transaction volume and unique active users over time" />
+        <SectionHeader title={`Platform Trends (${trendMonths} Months)`} subtitle="Transaction volume and unique active users over time" />
         <div className="rounded-xl ring-1 ring-slate-700/50 p-5" style={{ backgroundColor: '#1e293b' }}>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+            {[3, 6, 12].map(m => (
+              <button key={m} onClick={() => setTrendMonths(m)}
+                style={{ fontSize: 12, padding: '4px 10px', borderRadius: 6, cursor: 'pointer', border: '1px solid',
+                  backgroundColor: trendMonths === m ? '#6366f1' : 'transparent',
+                  borderColor: trendMonths === m ? '#6366f1' : '#334155',
+                  color: trendMonths === m ? '#fff' : '#94a3b8' }}>
+                {m}M
+              </button>
+            ))}
+          </div>
           {trends.length === 0 ? (
             <p className="text-sm text-center py-8" style={{ color: '#64748b' }}>No trend data.</p>
           ) : (

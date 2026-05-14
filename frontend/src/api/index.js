@@ -69,8 +69,8 @@ export const deleteCategory = (id) =>
 export const getCashflow = (months = 6) =>
   api.get('/reports/cashflow', { params: { months } })
 
-export const getBudgetStatus = () =>
-  api.get('/reports/budget')
+export const getBudgetStatus = (params = {}) =>
+  api.get('/reports/budget', { params })
 
 export const sendChat = (message, history = []) =>
   api.post('/chat', { message, history })

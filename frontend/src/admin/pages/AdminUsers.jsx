@@ -94,6 +94,37 @@ export default function AdminUsers() {
     }
   }
 
+  const handleExport = async () => {
+    try {
+      const res = await adminApi.get('/users', { params: { page: 0, per_page: 1000, search } })
+      const rows = res.data?.data || []
+      const headers = ['ID', 'Email', 'Name', 'Joined', 'Last Active', 'Transactions', 'Income ($)', 'Expenses ($)', 'Status']
+      const csvRows = [
+        headers.join(','),
+        ...rows.map(u => [
+          u.id,
+          `"${u.email}"`,
+          `"${u.name || ''}"`,
+          u.created_at ? new Date(u.created_at).toLocaleDateString() : '',
+          u.last_active_at ? new Date(u.last_active_at).toLocaleDateString() : 'Never',
+          u.transaction_count,
+          ((u.total_income_cents || 0) / 100).toFixed(2),
+          ((u.total_expense_cents || 0) / 100).toFixed(2),
+          u.is_suspended ? 'Suspended' : 'Active',
+        ].join(','))
+      ]
+      const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `users-${new Date().toISOString().slice(0, 10)}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      toast.error('Failed to export users.')
+    }
+  }
+
   const totalPages = Math.ceil(total / PER_PAGE)
 
   return (
@@ -103,18 +134,26 @@ export default function AdminUsers() {
           <h1 className="text-2xl font-bold text-white">Users</h1>
           <p className="text-sm mt-1" style={{ color: '#94a3b8' }}>{total.toLocaleString()} total users</p>
         </div>
-        <div className="relative">
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color: '#64748b' }}>
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name or email..."
-            className="pl-9 pr-4 py-2.5 rounded-xl text-sm text-white placeholder-slate-500 border outline-none focus:ring-2 focus:ring-indigo-500 w-72 transition"
-            style={{ backgroundColor: '#1e293b', borderColor: '#334155' }}
-          />
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color: '#64748b' }}>
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by name or email..."
+              className="pl-9 pr-4 py-2.5 rounded-xl text-sm text-white placeholder-slate-500 border outline-none focus:ring-2 focus:ring-indigo-500 w-72 transition"
+              style={{ backgroundColor: '#1e293b', borderColor: '#334155' }}
+            />
+          </div>
+          <button onClick={handleExport}
+            style={{ fontSize: 13, padding: '7px 14px', borderRadius: 8, cursor: 'pointer',
+              border: '1px solid #334155', background: 'transparent', color: '#94a3b8',
+              display: 'flex', alignItems: 'center', gap: 6 }}>
+            &#8595; Export CSV
+          </button>
         </div>
       </div>
 

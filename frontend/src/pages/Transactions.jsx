@@ -519,6 +519,9 @@ export default function Transactions() {
   const [page, setPage] = useState(0)
   const limit = 20
 
+  const [sortField, setSortField] = useState('date')
+  const [sortDir, setSortDir] = useState('desc')
+
   const [filters, setFilters] = useState({ start:'', end:'', category_id:'', type:'all', search:'' })
   const [searchValue, setSearchValue] = useState('')
   const searchDebounceRef = useRef(null)
@@ -531,6 +534,11 @@ export default function Transactions() {
   const [confirmDeleteId, setConfirmDeleteId] = useState(null)
 
   const showToast = (message, type='success') => setToast({ message, type })
+
+  const toggleSort = (field) => {
+    if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortField(field); setSortDir('desc') }
+  }
 
   const handleSearchChange = (e) => {
     const val = e.target.value
@@ -653,6 +661,15 @@ export default function Transactions() {
     })
     setModalOpen(true)
   }
+
+  const sortedTxns = [...transactions].sort((a, b) => {
+    let av = a[sortField], bv = b[sortField]
+    if (sortField === 'amount_cents') { av = Math.abs(av); bv = Math.abs(bv) }
+    if (sortField === 'date') { av = new Date(av); bv = new Date(bv) }
+    if (av < bv) return sortDir === 'asc' ? -1 : 1
+    if (av > bv) return sortDir === 'asc' ? 1 : -1
+    return 0
+  })
 
   const totalPages = Math.ceil(total/limit)
   const hasFilters = filters.start||filters.end||filters.category_id||filters.type!=='all'||filters.search
@@ -784,9 +801,20 @@ export default function Transactions() {
           <table className="w-full text-sm">
             <thead>
               <tr style={{ backgroundColor:'#1e293b', borderBottom:'1px solid #334155' }}>
-                {['Date','Description','Party','Category','Amount','Source','Rec.','Actions'].map(h => (
-                  <th key={h} className="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider" style={{ color:'#64748b' }}>{h}</th>
-                ))}
+                <th className="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider" style={{ color:'#64748b', cursor:'pointer', userSelect:'none' }} onClick={() => toggleSort('date')}>
+                  Date {sortField === 'date' ? (sortDir === 'asc' ? '↑' : '↓') : <span style={{opacity:0.3}}>↕</span>}
+                </th>
+                <th className="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider" style={{ color:'#64748b', cursor:'pointer', userSelect:'none' }} onClick={() => toggleSort('description')}>
+                  Description {sortField === 'description' ? (sortDir === 'asc' ? '↑' : '↓') : <span style={{opacity:0.3}}>↕</span>}
+                </th>
+                <th className="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider" style={{ color:'#64748b' }}>Party</th>
+                <th className="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider" style={{ color:'#64748b' }}>Category</th>
+                <th className="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider" style={{ color:'#64748b', cursor:'pointer', userSelect:'none' }} onClick={() => toggleSort('amount_cents')}>
+                  Amount {sortField === 'amount_cents' ? (sortDir === 'asc' ? '↑' : '↓') : <span style={{opacity:0.3}}>↕</span>}
+                </th>
+                <th className="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider" style={{ color:'#64748b' }}>Source</th>
+                <th className="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider" style={{ color:'#64748b' }}>Rec.</th>
+                <th className="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider" style={{ color:'#64748b' }}>Actions</th>
               </tr>
             </thead>
             <tbody style={{ backgroundColor:'#0f172a' }}>
@@ -803,7 +831,7 @@ export default function Transactions() {
                   </div>
                 </td></tr>
               ) : (
-                transactions.map(tx => (
+                sortedTxns.map(tx => (
                   <tr key={tx.id} className="border-t transition-colors hover:bg-slate-800/50" style={{ borderColor:'#1e293b' }}>
                     <td className="px-4 py-3.5 whitespace-nowrap text-xs" style={{ color:'#64748b' }}>
                       {tx.date ? new Date(tx.date+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—'}
