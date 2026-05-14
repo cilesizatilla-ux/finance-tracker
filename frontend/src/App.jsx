@@ -12,6 +12,7 @@ import Parties from './pages/Parties.jsx'
 import Reports from './pages/Reports.jsx'
 import SharedReportView from './pages/SharedReportView.jsx'
 import AuthCallback from './pages/AuthCallback.jsx'
+import AdminApp from './admin/AdminApp.jsx'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -35,6 +36,7 @@ function AppRoutes() {
   const { user } = useAuth()
   return (
     <Routes>
+      <Route path="/admin/*" element={<AdminApp />} />
       <Route
         path="/login"
         element={user ? <Navigate to="/" replace /> : <Login />}

@@ -11,14 +11,18 @@ load_dotenv()
 
 from backend.database import Base, SessionLocal, engine
 from backend.dependencies import get_current_user
+from backend.models import AdminAuditLog  # noqa: F401
+from backend.models import AdminUser  # noqa: F401
 from backend.models import Category  # noqa: F401 – ensures model is registered
 from backend.models import Party  # noqa: F401
 from backend.models import SharedReport  # noqa: F401
 from backend.models import Transaction  # noqa: F401
 from backend.models import User  # noqa: F401
+from backend.models import UserProfile  # noqa: F401
 from backend.routers import analyze, categories, chat, reports, transactions
 from backend.routers import auth as auth_router
 from backend.routers import extract, parties, shared
+from backend.routers import admin as admin_router
 
 # ---------------------------------------------------------------------------
 # App setup
@@ -109,6 +113,12 @@ def on_startup():
             conn.execute(text("ALTER TABLE transactions ADD COLUMN is_recurring BOOLEAN NOT NULL DEFAULT 0"))
             conn.commit()
 
+        # Migrations for users table
+        user_cols = [row[1] for row in conn.execute(text("PRAGMA table_info(users)"))]
+        if "last_active_at" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN last_active_at DATETIME"))
+            conn.commit()
+
     db = SessionLocal()
     try:
         # Seed expense categories if none exist
@@ -123,6 +133,20 @@ def on_startup():
             for cat_data in _DEFAULT_INCOME_CATEGORIES:
                 if not db.query(Category).filter(Category.name == cat_data["name"]).first():
                     db.add(Category(name=cat_data["name"], color=cat_data["color"], budget_cents=0, is_income=True))
+            db.commit()
+
+        # Seed super admin
+        from passlib.context import CryptContext
+        _pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
+        admin_pass = os.getenv("ADMIN_PASSWORD", "Admin@Finance2024!")
+        if not db.query(AdminUser).filter(AdminUser.username == "admin").first():
+            db.add(AdminUser(
+                username="admin",
+                email="admin@financetracker.local",
+                password_hash=_pwd_ctx.hash(admin_pass),
+                role="super_admin",
+                is_active=True,
+            ))
             db.commit()
     finally:
         db.close()
@@ -144,6 +168,7 @@ app.include_router(parties.router, prefix="/api/v1", dependencies=_auth_dep)
 app.include_router(extract.router, prefix="/api/v1", dependencies=_auth_dep)
 # shared router has its own mixed auth (POST is protected, GET is public)
 app.include_router(shared.router, prefix="/api/v1")
+app.include_router(admin_router.router, prefix="/api/v1")
 
 # ---------------------------------------------------------------------------
 # Static file serving for uploaded receipts

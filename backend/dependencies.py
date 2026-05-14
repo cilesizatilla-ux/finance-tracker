@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
@@ -20,4 +22,12 @@ def get_current_user(
     user = db.query(User).filter(User.id == int(payload["sub"])).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+
+    # Track last active time for admin analytics
+    try:
+        user.last_active_at = datetime.now(timezone.utc)
+        db.commit()
+    except Exception:
+        db.rollback()
+
     return user

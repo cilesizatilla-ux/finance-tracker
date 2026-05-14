@@ -7,6 +7,7 @@ from sqlalchemy.orm import relationship
 from backend.database import Base
 
 
+
 class User(Base):
     __tablename__ = "users"
 
@@ -99,3 +100,46 @@ class SharedReport(Base):
     recipient_email = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     expires_at = Column(DateTime, nullable=True)
+
+
+class AdminUser(Base):
+    __tablename__ = "admin_users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, nullable=False, index=True)
+    email = Column(String, unique=True, nullable=False, index=True)
+    password_hash = Column(String, nullable=False)
+    role = Column(String, default="admin", nullable=False)  # "super_admin" | "admin"
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_by_id = Column(Integer, ForeignKey("admin_users.id"), nullable=True)
+    last_login_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class AdminAuditLog(Base):
+    __tablename__ = "admin_audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    admin_id = Column(Integer, ForeignKey("admin_users.id"), nullable=False, index=True)
+    action = Column(String, nullable=False)  # e.g. "suspend_user", "delete_transaction"
+    target_type = Column(String, nullable=True)  # "user", "transaction", "admin"
+    target_id = Column(Integer, nullable=True)
+    detail = Column(Text, nullable=True)  # JSON string with extra context
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class UserProfile(Base):
+    __tablename__ = "user_profiles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False, index=True)
+    country = Column(String, nullable=True)
+    currency = Column(String, default="USD", nullable=True)
+    income_bracket = Column(String, nullable=True)  # "0-25k", "25k-50k", "50k-100k", "100k-200k", "200k+"
+    financial_goal = Column(String, nullable=True)  # "save", "invest", "debt_free", "retire_early", "track"
+    occupation = Column(String, nullable=True)
+    is_suspended = Column(Boolean, default=False, nullable=False, server_default="0")
+    suspended_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
