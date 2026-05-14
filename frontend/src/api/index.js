@@ -155,4 +155,11 @@ export const adminGetAllExpenses = (params = {}) => adminApi.get('/audit/expense
 export const adminReviewExpense = (id, payload) => adminApi.post(`/audit/expenses/${id}/review`, payload)
 export const adminListUsers = (params = {}) => adminApi.get('/users', { params })
 
+// Savings Goals
+export const getGoals = () => api.get('/goals')
+export const createGoal = (payload) => api.post('/goals', payload)
+export const updateGoal = (id, payload) => api.put(`/goals/${id}`, payload)
+export const deleteGoal = (id) => api.delete(`/goals/${id}`)
+export const contributeToGoal = (id, payload) => api.post(`/goals/${id}/contribute`, payload)
+
 export default api

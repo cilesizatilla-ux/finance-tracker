@@ -17,6 +17,7 @@ import AdminApp from './admin/AdminApp.jsx'
 import Settings from './pages/Settings.jsx'
 import AuditCalendar from './pages/AuditCalendar.jsx'
 import AuditExpenses from './pages/AuditExpenses.jsx'
+import Goals from './pages/Goals.jsx'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -65,6 +66,7 @@ function AppRoutes() {
         <Route path="settings" element={<Settings />} />
         <Route path="audit-calendar" element={<AuditCalendar />} />
         <Route path="audit-expenses" element={<AuditExpenses />} />
+        <Route path="goals" element={<Goals />} />
       </Route>
     </Routes>
   )

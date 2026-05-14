@@ -11,6 +11,7 @@ import AdminAdmins from './pages/AdminAdmins.jsx'
 import AdminAuditLogs from './pages/AdminAuditLogs.jsx'
 import AdminNotifications from './pages/AdminNotifications.jsx'
 import AdminAuditCalendar from './pages/AdminAuditCalendar.jsx'
+import AdminSystemHealth from './pages/AdminSystemHealth.jsx'
 
 function LoadingSpinner() {
   return (
@@ -50,6 +51,7 @@ function AdminRoutes() {
         <Route path="audit-logs" element={<AdminAuditLogs />} />
         <Route path="notifications" element={<AdminNotifications />} />
         <Route path="audit-calendar" element={<AdminAuditCalendar />} />
+        <Route path="system-health" element={<AdminSystemHealth />} />
       </Route>
     </Routes>
   )

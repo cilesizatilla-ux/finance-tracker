@@ -206,3 +206,28 @@ class AuditExpense(Base):
     audit_entry = relationship("AuditEntry", back_populates="expenses")
     user = relationship("User", foreign_keys=[user_id])
     reviewer = relationship("AdminUser", foreign_keys=[reviewed_by_id])
+
+
+class SavingsGoal(Base):
+    __tablename__ = "savings_goals"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    name = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    target_amount_cents = Column(Integer, nullable=False)
+    current_amount_cents = Column(Integer, default=0)
+    deadline = Column(Date, nullable=True)
+    icon = Column(String, default="🎯")
+    color = Column(String, default="#6366f1")
+    status = Column(String, default="active")  # active, completed, paused, cancelled
+    created_at = Column(DateTime, default=func.now())
+    contributions = relationship("GoalContribution", back_populates="goal", cascade="all, delete-orphan")
+
+class GoalContribution(Base):
+    __tablename__ = "goal_contributions"
+    id = Column(Integer, primary_key=True, index=True)
+    goal_id = Column(Integer, ForeignKey("savings_goals.id"), nullable=False)
+    amount_cents = Column(Integer, nullable=False)
+    note = Column(String, nullable=True)
+    contributed_at = Column(DateTime, default=func.now())
+    goal = relationship("SavingsGoal", back_populates="contributions")

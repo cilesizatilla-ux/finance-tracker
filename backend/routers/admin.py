@@ -1127,3 +1127,80 @@ def list_admin_notifications(
         "id": n.id, "title": n.title, "body": n.body,
         "created_at": n.created_at.isoformat() if n.created_at else None,
     } for n in notifs])
+
+
+# ---------------------------------------------------------------------------
+# System Health
+# ---------------------------------------------------------------------------
+
+@router.get("/analytics/system-overview")
+def system_overview(
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(get_current_admin),
+):
+    from backend.models import AuditEntry
+    total_users = db.query(func.count(User.id)).scalar() or 0
+    total_transactions = (
+        db.query(func.count(Transaction.id))
+        .filter(Transaction.deleted_at.is_(None))
+        .scalar() or 0
+    )
+    total_volume = (
+        db.query(func.sum(Transaction.amount_cents))
+        .filter(Transaction.deleted_at.is_(None))
+        .scalar() or 0
+    )
+    total_audits = db.query(func.count(AuditEntry.id)).scalar() or 0
+    cutoff = datetime.utcnow() - timedelta(days=30)
+    new_users_30d = (
+        db.query(func.count(User.id))
+        .filter(User.created_at >= cutoff)
+        .scalar() or 0
+    )
+    return {
+        "total_users": total_users,
+        "total_transactions": total_transactions,
+        "total_volume_cents": int(total_volume),
+        "total_audits": total_audits,
+        "new_users_30d": new_users_30d,
+    }
+
+
+@router.get("/analytics/monthly-volume")
+def monthly_volume(
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(get_current_admin),
+):
+    import calendar as cal_mod
+    from sqlalchemy import extract
+
+    results = []
+    today = datetime.utcnow().date()
+    for i in range(11, -1, -1):
+        month_offset = today.month - i
+        year_offset = today.year
+        while month_offset <= 0:
+            month_offset += 12
+            year_offset -= 1
+        while month_offset > 12:
+            month_offset -= 12
+            year_offset += 1
+
+        q = db.query(
+            func.count(Transaction.id).label("count"),
+            func.coalesce(func.sum(Transaction.amount_cents), 0).label("volume"),
+        ).filter(
+            Transaction.deleted_at.is_(None),
+            extract("year", Transaction.created_at) == year_offset,
+            extract("month", Transaction.created_at) == month_offset,
+        )
+        row = q.first()
+        month_name = cal_mod.month_abbr[month_offset]
+        results.append({
+            "label": f"{month_name} {str(year_offset)[2:]}",
+            "month": month_offset,
+            "year": year_offset,
+            "tx_count": row.count if row else 0,
+            "volume_cents": int(row.volume) if row else 0,
+        })
+    return results

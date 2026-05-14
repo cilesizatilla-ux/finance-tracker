@@ -1,6 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { shareReport, listShares, deleteShare, getCashflow, getTopCategories } from '../api/index.js'
+import api from '../api/index.js'
 import CurrencyAmount from '../components/CurrencyAmount.jsx'
+import {
+  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
+} from 'recharts'
 
 const MONTHS = [
   'January','February','March','April','May','June',
@@ -85,6 +89,8 @@ export default function Reports() {
   const [toast, setToast] = useState(null)
   const [deletingId, setDeletingId] = useState(null)
   const [topCats, setTopCats] = useState([])
+  const [trendData, setTrendData] = useState([])
+  const [trendLoading, setTrendLoading] = useState(true)
 
   const showToast = (message, type = 'success') => setToast({ message, type })
 
@@ -125,6 +131,43 @@ export default function Reports() {
     load()
     return () => { cancelled = true }
   }, [selectedMonth, selectedYear])
+
+  // Fetch 6-month trend data
+  useEffect(() => {
+    const fetchTrend = async () => {
+      setTrendLoading(true)
+      try {
+        const results = []
+        const now = new Date()
+        for (let i = 5; i >= 0; i--) {
+          const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+          const m = d.getMonth() + 1
+          const y = d.getFullYear()
+          // Fetch transactions for that month
+          const res = await api.get('/transactions', { params: { month: m, year: y, limit: 1000 } })
+          const txs = res.data?.data || res.data || []
+          let income = 0, expense = 0
+          txs.forEach(t => {
+            // NOTE: Transaction uses is_income boolean (not type string)
+            if (t.is_income) income += (t.amount_cents || 0)
+            else expense += (t.amount_cents || 0)
+          })
+          results.push({
+            label: d.toLocaleString('default', { month: 'short' }) + ' ' + String(y).slice(2),
+            income: income / 100,
+            expense: expense / 100,
+            net: (income - expense) / 100,
+          })
+        }
+        setTrendData(results)
+      } catch (e) {
+        setTrendData([])
+      } finally {
+        setTrendLoading(false)
+      }
+    }
+    fetchTrend()
+  }, [])
 
   // Fetch top categories for the selected month
   useEffect(() => {
@@ -381,6 +424,35 @@ export default function Reports() {
           </div>
         </div>
       )}
+
+      {/* 6-Month Trend */}
+      <div className="bg-slate-800 rounded-2xl border border-slate-700 p-6">
+        <h2 className="text-base font-semibold text-white mb-4">6-Month Income vs Expense Trend</h2>
+        {trendLoading ? (
+          <div className="h-64 flex items-center justify-center">
+            <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : trendData.length === 0 ? (
+          <p className="text-slate-400 text-sm text-center py-12">No data available</p>
+        ) : (
+          <ResponsiveContainer width="100%" height={260}>
+            <ComposedChart data={trendData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+              <XAxis dataKey="label" tick={{ fill: '#94a3b8', fontSize: 12 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => `$${v >= 1000 ? (v/1000).toFixed(1)+'k' : v}`} />
+              <Tooltip
+                contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: 8 }}
+                labelStyle={{ color: '#e2e8f0' }}
+                formatter={(value, name) => [`$${value.toFixed(2)}`, name.charAt(0).toUpperCase() + name.slice(1)]}
+              />
+              <Legend wrapperStyle={{ color: '#94a3b8', fontSize: 12 }} />
+              <Bar dataKey="income" name="Income" fill="#34d399" radius={[4,4,0,0]} maxBarSize={40} />
+              <Bar dataKey="expense" name="Expense" fill="#f87171" radius={[4,4,0,0]} maxBarSize={40} />
+              <Line type="monotone" dataKey="net" name="Net" stroke="#818cf8" strokeWidth={2} dot={{ fill: '#818cf8', r: 3 }} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        )}
+      </div>
 
       {/* Previous shares */}
       <div className="rounded-2xl border shadow-sm" style={{ backgroundColor: '#1e293b', borderColor: '#334155' }}>
