@@ -146,12 +146,33 @@ export default function Login() {
 
           <div className="space-y-4">
             {[
-              { icon: '📊', text: 'Visualize your cash flow in real time' },
-              { icon: '🤖', text: 'AI advisor that understands your finances' },
-              { icon: '🎯', text: 'Smart budget tracking per category' },
-            ].map(({ icon, text }) => (
+              {
+                text: 'Visualize your cash flow in real time',
+                svg: (
+                  <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color: '#818cf8' }}>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
+                )
+              },
+              {
+                text: 'AI advisor that understands your finances',
+                svg: (
+                  <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color: '#818cf8' }}>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V5a2 2 0 00-2-2h-2M9 3a2 2 0 002 2h2a2 2 0 002-2M9 3h6m-3 9h.01M9 12h.01M15 12h.01M9 16h6" />
+                  </svg>
+                )
+              },
+              {
+                text: 'Smart budget tracking per category',
+                svg: (
+                  <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color: '#818cf8' }}>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                )
+              },
+            ].map(({ svg, text }) => (
               <div key={text} className="flex items-center gap-3">
-                <span className="text-xl">{icon}</span>
+                {svg}
                 <span className="text-sm" style={{ color: '#cbd5e1' }}>{text}</span>
               </div>
             ))}
@@ -206,12 +227,14 @@ export default function Login() {
             </button>
           )}
 
-          {/* Divider */}
-          <div className="flex items-center gap-3 mb-6">
-            <div className="flex-1 h-px" style={{ backgroundColor: '#1e293b' }} />
-            <span className="text-xs" style={{ color: '#475569' }}>or continue with email</span>
-            <div className="flex-1 h-px" style={{ backgroundColor: '#1e293b' }} />
-          </div>
+          {/* Divider — only shown when Google OAuth is available */}
+          {googleClientId && (
+            <div className="flex items-center gap-3 mb-6">
+              <div className="flex-1 h-px" style={{ backgroundColor: '#1e293b' }} />
+              <span className="text-xs" style={{ color: '#475569' }}>or continue with email</span>
+              <div className="flex-1 h-px" style={{ backgroundColor: '#1e293b' }} />
+            </div>
+          )}
 
           {/* Error */}
           {error && (

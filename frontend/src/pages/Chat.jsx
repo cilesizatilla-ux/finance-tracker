@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { sendChat, getStatus } from '../api/index.js'
 import { useAuth } from '../contexts/AuthContext.jsx'
+import ReactMarkdown from 'react-markdown'
 
 function RobotIcon() {
   return (
@@ -29,9 +30,9 @@ function Message({ role, content, userInitials }) {
 
       {/* Bubble */}
       <div
-        className={`max-w-[75%] px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
+        className={`max-w-[75%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${
           isUser
-            ? 'bg-indigo-600 text-white rounded-tr-sm'
+            ? 'bg-indigo-600 text-white rounded-tr-sm whitespace-pre-wrap'
             : 'rounded-tl-sm'
         }`}
         style={!isUser ? {
@@ -40,7 +41,21 @@ function Message({ role, content, userInitials }) {
           color: '#f1f5f9'
         } : {}}
       >
-        {content}
+        {isUser ? content : (
+          <>
+            <div className="text-sm leading-relaxed prose prose-invert max-w-none" style={{ color: 'inherit' }}>
+              <ReactMarkdown>{content}</ReactMarkdown>
+            </div>
+            <button
+              onClick={() => navigator.clipboard.writeText(content)}
+              style={{ marginTop: 6, fontSize: 11, color: '#64748b', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px', borderRadius: 4 }}
+              onMouseEnter={e => e.target.style.color = '#94a3b8'}
+              onMouseLeave={e => e.target.style.color = '#64748b'}
+            >
+              Copy
+            </button>
+          </>
+        )}
       </div>
     </div>
   )
@@ -154,7 +169,8 @@ export default function Chat() {
   }
 
   const handleClear = () => {
-    setMessages([WELCOME_MESSAGE])
+    if (messages.length <= 1) return
+    setMessages([messages[0]])
     setError(null)
     inputRef.current?.focus()
   }

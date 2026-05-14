@@ -126,10 +126,12 @@ export default function AdminBenchmarks() {
         <div>
           <h2 className="text-sm font-semibold text-white mb-4">Category Detail Cards</h2>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {benchmarks.map((b, i) => {
+            {(() => {
+              const globalMax = Math.max(...benchmarks.map(b => Math.max(b.p75_cents || 0, b.avg_monthly_spend_cents || 0)), 1)
+              return benchmarks.map((b, i) => {
               const p25 = b.p25_cents || 0
               const p75 = b.p75_cents || 0
-              const max = Math.max(p75, b.avg_monthly_spend_cents || 0, 1)
+              const max = globalMax
               const p25Pct = (p25 / max) * 100
               const p75Pct = (p75 / max) * 100
               const avgPct = ((b.avg_monthly_spend_cents || 0) / max) * 100
@@ -207,7 +209,8 @@ export default function AdminBenchmarks() {
                   </div>
                 </div>
               )
-            })}
+            })
+            })()}
           </div>
         </div>
       )}

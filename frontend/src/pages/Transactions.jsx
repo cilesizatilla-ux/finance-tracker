@@ -528,6 +528,7 @@ export default function Transactions() {
   const [toast, setToast] = useState(null)
   const [csvLoading, setCsvLoading] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null)
 
   const showToast = (message, type='success') => setToast({ message, type })
 
@@ -600,10 +601,10 @@ export default function Transactions() {
     } catch { showToast('Failed to save transaction.','error') }
   }
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Delete this transaction?')) return
+  const confirmDelete = async (id) => {
     try { await deleteTransaction(id); showToast('Transaction deleted.'); fetchTransactions() }
     catch { showToast('Failed to delete.','error') }
+    finally { setConfirmDeleteId(null) }
   }
 
   const handleCSVImport = async (e) => {
@@ -862,13 +863,31 @@ export default function Transactions() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
                           </svg>
                         </button>
-                        <button onClick={() => handleDelete(tx.id)} className="p-1.5 rounded-lg transition-colors" style={{ color:'#f87171' }}
-                          onMouseEnter={e => e.currentTarget.style.backgroundColor='#ef444415'}
-                          onMouseLeave={e => e.currentTarget.style.backgroundColor='transparent'} title="Delete">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                          </svg>
-                        </button>
+                        {confirmDeleteId === tx.id ? (
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => confirmDelete(tx.id)}
+                              className="px-2 py-0.5 rounded-lg text-xs bg-red-600 hover:bg-red-500 text-white transition-colors"
+                            >
+                              Confirm
+                            </button>
+                            <button
+                              onClick={() => setConfirmDeleteId(null)}
+                              className="px-2 py-0.5 rounded-lg text-xs border transition-colors hover:bg-slate-700"
+                              style={{ borderColor:'#334155', color:'#94a3b8' }}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button onClick={() => setConfirmDeleteId(tx.id)} className="p-1.5 rounded-lg transition-colors" style={{ color:'#f87171' }}
+                            onMouseEnter={e => e.currentTarget.style.backgroundColor='#ef444415'}
+                            onMouseLeave={e => e.currentTarget.style.backgroundColor='transparent'} title="Delete">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                            </svg>
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import adminApi from '../adminApi.js'
 import { useAdminAuth } from '../AdminAuthContext.jsx'
+import { useAdminToast } from '../AdminToast.jsx'
 
 function fmtDate(dateStr) {
   if (!dateStr) return '—'
@@ -37,6 +38,8 @@ export default function AdminAdmins() {
   const [formLoading, setFormLoading] = useState(false)
   const [actionLoading, setActionLoading] = useState({})
   const [confirmDelete, setConfirmDelete] = useState(null)
+  const [selectedAdmin, setSelectedAdmin] = useState(null)
+  const { toast, ToastContainer } = useAdminToast()
 
   useEffect(() => {
     fetchAdmins()
@@ -58,6 +61,10 @@ export default function AdminAdmins() {
   async function handleCreate(e) {
     e.preventDefault()
     setFormError(null)
+    if (form.password.length < 8) {
+      toast.error('Password must be at least 8 characters.')
+      return
+    }
     setFormLoading(true)
     try {
       const res = await adminApi.post('/admins', form)
@@ -65,6 +72,7 @@ export default function AdminAdmins() {
       setAdmins((prev) => [...prev, newAdmin])
       setForm(EMPTY_FORM)
       setShowForm(false)
+      toast.success('Admin account created.')
     } catch (err) {
       const msg = err.response?.data?.detail || err.response?.data?.message || 'Failed to create admin.'
       setFormError(msg)
@@ -80,8 +88,10 @@ export default function AdminAdmins() {
       setAdmins((prev) => prev.map((a) =>
         a.id === adminId ? { ...a, is_active: !a.is_active } : a
       ))
-    } catch {
-      // ignore
+      const updated = admins.find((a) => a.id === adminId)
+      toast.success(updated?.is_active ? 'Admin deactivated.' : 'Admin activated.')
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to update admin status.')
     } finally {
       setActionLoading((prev) => ({ ...prev, [adminId]: null }))
     }
@@ -92,11 +102,13 @@ export default function AdminAdmins() {
     try {
       await adminApi.delete(`/admins/${adminId}`)
       setAdmins((prev) => prev.filter((a) => a.id !== adminId))
-    } catch {
-      // ignore
+      toast.success('Admin account deleted.')
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to delete admin.')
     } finally {
       setActionLoading((prev) => ({ ...prev, [adminId]: null }))
       setConfirmDelete(null)
+      setSelectedAdmin(null)
     }
   }
 
@@ -210,7 +222,7 @@ export default function AdminAdmins() {
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
           <div className="rounded-2xl border p-6 max-w-sm w-full mx-4" style={{ backgroundColor: '#1e293b', borderColor: '#334155' }}>
             <h3 className="text-base font-bold text-white mb-2">Delete Admin?</h3>
-            <p className="text-sm mb-5" style={{ color: '#94a3b8' }}>This will permanently remove this admin account.</p>
+            <p className="text-sm mb-5" style={{ color: '#94a3b8' }}>Are you sure you want to delete admin &quot;{selectedAdmin?.username}&quot;? This will permanently remove this admin account.</p>
             <div className="flex gap-3">
               <button
                 onClick={() => setConfirmDelete(null)}
@@ -292,7 +304,7 @@ export default function AdminAdmins() {
                               {actionLoading[a.id] === 'toggle' ? '...' : a.is_active ? 'Deactivate' : 'Activate'}
                             </button>
                             <button
-                              onClick={() => setConfirmDelete(a.id)}
+                              onClick={() => { setConfirmDelete(a.id); setSelectedAdmin(a) }}
                               disabled={isSelf || actionLoading[a.id] === 'delete'}
                               className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                               style={{ backgroundColor: '#ef444420', color: '#fca5a5' }}
@@ -310,6 +322,7 @@ export default function AdminAdmins() {
           </div>
         )}
       </div>
+      <ToastContainer />
     </div>
   )
 }

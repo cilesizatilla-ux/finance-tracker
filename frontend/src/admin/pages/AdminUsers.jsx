@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import adminApi from '../adminApi.js'
 import { useAdminAuth } from '../AdminAuthContext.jsx'
+import { useAdminToast } from '../AdminToast.jsx'
 
 const fmt = (cents) => '$' + (Math.abs(cents) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
@@ -24,8 +25,10 @@ export default function AdminUsers() {
   const [error, setError] = useState(null)
   const [actionLoading, setActionLoading] = useState({})
   const [confirmDelete, setConfirmDelete] = useState(null)
+  const [selectedUser, setSelectedUser] = useState(null)
   const navigate = useNavigate()
   const { admin } = useAdminAuth()
+  const { toast, ToastContainer } = useAdminToast()
   const isSuperAdmin = admin?.role === 'super_admin'
   const PER_PAGE = 20
   const debounceRef = useRef(null)
@@ -61,13 +64,16 @@ export default function AdminUsers() {
 
   async function handleSuspend(userId, currentlySuspended) {
     setActionLoading((prev) => ({ ...prev, [userId]: 'suspend' }))
+    setUsers((prev) => prev.map((u) =>
+      u.id === userId ? { ...u, is_suspended: !currentlySuspended } : u
+    ))
     try {
       await adminApi.patch(`/users/${userId}/suspend`)
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to update user status.')
       setUsers((prev) => prev.map((u) =>
-        u.id === userId ? { ...u, is_suspended: !currentlySuspended } : u
+        u.id === userId ? { ...u, is_suspended: currentlySuspended } : u
       ))
-    } catch {
-      // ignore
     } finally {
       setActionLoading((prev) => ({ ...prev, [userId]: null }))
     }
@@ -79,11 +85,12 @@ export default function AdminUsers() {
       await adminApi.delete(`/users/${userId}`)
       setUsers((prev) => prev.filter((u) => u.id !== userId))
       setTotal((t) => t - 1)
-    } catch {
-      // ignore
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to delete user.')
     } finally {
       setActionLoading((prev) => ({ ...prev, [userId]: null }))
       setConfirmDelete(null)
+      setSelectedUser(null)
     }
   }
 
@@ -121,7 +128,7 @@ export default function AdminUsers() {
           <div className="rounded-2xl border p-6 max-w-sm w-full mx-4" style={{ backgroundColor: '#1e293b', borderColor: '#334155' }}>
             <h3 className="text-base font-bold text-white mb-2">Delete User?</h3>
             <p className="text-sm mb-5" style={{ color: '#94a3b8' }}>
-              This will permanently delete the user and all their data. This action cannot be undone.
+              Are you sure you want to delete {selectedUser?.email}? This will permanently delete the user and all their data. This action cannot be undone.
             </p>
             <div className="flex gap-3">
               <button
@@ -232,7 +239,7 @@ export default function AdminUsers() {
                           </button>
                           {isSuperAdmin && (
                             <button
-                              onClick={() => setConfirmDelete(user.id)}
+                              onClick={() => { setConfirmDelete(user.id); setSelectedUser(user) }}
                               disabled={actionLoading[user.id] === 'delete'}
                               className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
                               style={{ backgroundColor: '#ef444420', color: '#fca5a5' }}
@@ -277,6 +284,7 @@ export default function AdminUsers() {
           </div>
         )}
       </div>
+      <ToastContainer />
     </div>
   )
 }

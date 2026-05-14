@@ -61,6 +61,8 @@ export default function AdminAnalytics() {
   const [trends, setTrends] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [anomalyPage, setAnomalyPage] = useState(0)
+  const ANOMALY_PAGE_SIZE = 20
 
   useEffect(() => {
     async function fetchAll() {
@@ -222,34 +224,61 @@ export default function AdminAnalytics() {
           {anomalies.length === 0 ? (
             <p className="text-sm text-center py-8" style={{ color: '#64748b' }}>No anomalies detected.</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b" style={{ borderColor: '#334155' }}>
-                    {['User Email', 'Date', 'Description', 'Amount', 'Flag'].map((h) => (
-                      <th key={h} className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#64748b' }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-700/50">
-                  {anomalies.map((tx) => (
-                    <tr key={tx.id} className="hover:bg-slate-800/40 transition-colors">
-                      <td className="px-4 py-3 text-sm text-white">{tx.user_email}</td>
-                      <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: '#94a3b8' }}>{fmtDate(tx.date)}</td>
-                      <td className="px-4 py-3 text-sm max-w-[200px] truncate" style={{ color: '#94a3b8' }}>{tx.description || '—'}</td>
-                      <td className="px-4 py-3 text-sm font-semibold whitespace-nowrap" style={{ color: tx.is_income ? '#22c55e' : '#ef4444' }}>
-                        {tx.is_income ? '+' : '-'}{fmt(tx.amount_cents)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: '#f59e0b20', color: '#fbbf24' }}>
-                          Anomaly
-                        </span>
-                      </td>
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b" style={{ borderColor: '#334155' }}>
+                      {['User Email', 'Date', 'Description', 'Amount', 'Flag'].map((h) => (
+                        <th key={h} className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#64748b' }}>{h}</th>
+                      ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-700/50">
+                    {anomalies.slice(anomalyPage * ANOMALY_PAGE_SIZE, (anomalyPage + 1) * ANOMALY_PAGE_SIZE).map((tx) => (
+                      <tr key={tx.id} className="hover:bg-slate-800/40 transition-colors">
+                        <td className="px-4 py-3 text-sm text-white">{tx.user_email}</td>
+                        <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: '#94a3b8' }}>{fmtDate(tx.date)}</td>
+                        <td className="px-4 py-3 text-sm max-w-[200px] truncate" style={{ color: '#94a3b8' }}>{tx.description || '—'}</td>
+                        <td className="px-4 py-3 text-sm font-semibold whitespace-nowrap" style={{ color: tx.is_income ? '#22c55e' : '#ef4444' }}>
+                          {tx.is_income ? '+' : '-'}{fmt(tx.amount_cents)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: '#f59e0b20', color: '#fbbf24' }}>
+                            Anomaly
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {anomalies.length > ANOMALY_PAGE_SIZE && (
+                <div className="flex items-center justify-between px-4 py-3 border-t" style={{ borderColor: '#334155' }}>
+                  <p className="text-xs" style={{ color: '#64748b' }}>
+                    Page {anomalyPage + 1} of {Math.ceil(anomalies.length / ANOMALY_PAGE_SIZE)} &middot; {anomalies.length} total
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setAnomalyPage((p) => Math.max(0, p - 1))}
+                      disabled={anomalyPage === 0}
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors disabled:opacity-40"
+                      style={{ borderColor: '#334155', color: '#94a3b8', backgroundColor: 'transparent' }}
+                    >
+                      Prev
+                    </button>
+                    <button
+                      onClick={() => setAnomalyPage((p) => Math.min(Math.ceil(anomalies.length / ANOMALY_PAGE_SIZE) - 1, p + 1))}
+                      disabled={anomalyPage >= Math.ceil(anomalies.length / ANOMALY_PAGE_SIZE) - 1}
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors disabled:opacity-40"
+                      style={{ borderColor: '#334155', color: '#94a3b8', backgroundColor: 'transparent' }}
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </section>

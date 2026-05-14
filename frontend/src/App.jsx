@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { GoogleOAuthProvider } from '@react-oauth/google'
 import { AuthProvider, useAuth } from './contexts/AuthContext.jsx'
+import { ToastProvider } from './contexts/ToastContext.jsx'
 import Layout from './components/Layout.jsx'
 import Dashboard from './pages/Dashboard.jsx'
 import Transactions from './pages/Transactions.jsx'
@@ -66,9 +67,11 @@ function AppRoutes() {
 export default function App() {
   return (
     <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID || ''}>
-      <AuthProvider>
-        <AppRoutes />
-      </AuthProvider>
+      <ToastProvider>
+        <AuthProvider>
+          <AppRoutes />
+        </AuthProvider>
+      </ToastProvider>
     </GoogleOAuthProvider>
   )
 }

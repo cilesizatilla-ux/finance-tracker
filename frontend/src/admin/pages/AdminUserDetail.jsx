@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import adminApi from '../adminApi.js'
+import { useAdminToast } from '../AdminToast.jsx'
 
 const fmt = (cents) => '$' + (Math.abs(cents) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
@@ -37,6 +38,7 @@ export default function AdminUserDetail() {
   const [suspendLoading, setSuspendLoading] = useState(false)
   const [error, setError] = useState(null)
   const PER_PAGE = 20
+  const { toast, ToastContainer } = useAdminToast()
 
   useEffect(() => {
     async function fetchUser() {
@@ -77,13 +79,14 @@ export default function AdminUserDetail() {
   async function handleSuspend() {
     setSuspendLoading(true)
     try {
-      await adminApi.patch(`/users/${userId}/suspend`)
+      const { data } = await adminApi.patch(`/users/${userId}/suspend`)
       setUser((prev) => ({
         ...prev,
         profile: { ...prev.profile, is_suspended: !prev.profile?.is_suspended },
       }))
-    } catch {
-      // ignore
+      toast.success(data.is_suspended ? 'User suspended.' : 'User unsuspended.')
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to update user status.')
     } finally {
       setSuspendLoading(false)
     }
@@ -305,6 +308,7 @@ export default function AdminUserDetail() {
           </div>
         )}
       </div>
+      <ToastContainer />
     </div>
   )
 }

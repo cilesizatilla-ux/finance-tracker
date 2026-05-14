@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
+  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts'
 import adminApi from '../adminApi.js'
 
@@ -65,28 +65,33 @@ export default function AdminDashboard() {
   const [recommendations, setRecommendations] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [lastUpdated, setLastUpdated] = useState(null)
+
+  const fetchAll = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const [ovRes, trRes, ugRes, recoRes] = await Promise.all([
+        adminApi.get('/analytics/overview'),
+        adminApi.get('/analytics/trends?months=6'),
+        adminApi.get('/analytics/user-growth'),
+        adminApi.get('/analytics/recommendations'),
+      ])
+      setOverview(ovRes.data?.data || ovRes.data)
+      setTrends(trRes.data?.data || trRes.data || [])
+      setUserGrowth(ugRes.data?.data || ugRes.data || [])
+      setRecommendations(recoRes.data?.data || recoRes.data || [])
+      setLastUpdated(new Date())
+    } catch {
+      setError('Failed to load dashboard data.')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
-    async function fetchAll() {
-      try {
-        const [ovRes, trRes, ugRes, recoRes] = await Promise.all([
-          adminApi.get('/analytics/overview'),
-          adminApi.get('/analytics/trends?months=6'),
-          adminApi.get('/analytics/user-growth'),
-          adminApi.get('/analytics/recommendations'),
-        ])
-        setOverview(ovRes.data?.data || ovRes.data)
-        setTrends(trRes.data?.data || trRes.data || [])
-        setUserGrowth(ugRes.data?.data || ugRes.data || [])
-        setRecommendations(recoRes.data?.data || recoRes.data || [])
-      } catch {
-        setError('Failed to load dashboard data.')
-      } finally {
-        setLoading(false)
-      }
-    }
     fetchAll()
-  }, [])
+  }, [fetchAll])
 
   if (loading) {
     return (
@@ -117,14 +122,22 @@ export default function AdminDashboard() {
 
   const growthChartData = userGrowth.map((t) => ({
     month: t.month,
-    Users: t.cumulative_users,
+    Users: t.new_users,
   }))
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-        <p className="text-sm mt-1" style={{ color: '#94a3b8' }}>Platform overview and key metrics</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Dashboard</h1>
+          <p className="text-sm mt-1" style={{ color: '#94a3b8' }}>Platform overview and key metrics</p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {lastUpdated && <span style={{ color: '#64748b', fontSize: 12 }}>Updated {lastUpdated.toLocaleTimeString()}</span>}
+          <button onClick={fetchAll} style={{ fontSize: 12, color: '#6366f1', background: 'none', border: '1px solid #6366f150', borderRadius: 6, padding: '4px 10px', cursor: 'pointer' }}>
+            ↻ Refresh
+          </button>
+        </div>
       </div>
 
       {/* Stat cards */}
@@ -232,7 +245,7 @@ export default function AdminDashboard() {
         {/* Revenue/Expense Trend */}
         <div className="rounded-xl ring-1 ring-slate-700/50" style={{ backgroundColor: '#1e293b' }}>
           <div className="px-5 pt-5 pb-4 border-b" style={{ borderColor: '#334155' }}>
-            <h2 className="text-sm font-semibold text-white">Revenue & Expense Trend</h2>
+            <h2 className="text-sm font-semibold text-white">User Income &amp; Expense Trend (Platform-wide)</h2>
             <p className="text-xs mt-0.5" style={{ color: '#94a3b8' }}>Last 6 months</p>
           </div>
           <div className="p-5">
@@ -279,17 +292,11 @@ export default function AdminDashboard() {
         <div className="rounded-xl ring-1 ring-slate-700/50" style={{ backgroundColor: '#1e293b' }}>
           <div className="px-5 pt-5 pb-4 border-b" style={{ borderColor: '#334155' }}>
             <h2 className="text-sm font-semibold text-white">User Growth</h2>
-            <p className="text-xs mt-0.5" style={{ color: '#94a3b8' }}>Cumulative registered users</p>
+            <p className="text-xs mt-0.5" style={{ color: '#94a3b8' }}>New users per month</p>
           </div>
           <div className="p-5">
             <ResponsiveContainer width="100%" height={260}>
-              <AreaChart data={growthChartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="usersGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
+              <BarChart data={growthChartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
                 <XAxis dataKey="month" tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} />
                 <YAxis
@@ -299,8 +306,8 @@ export default function AdminDashboard() {
                   width={45}
                 />
                 <Tooltip content={<CustomTooltip />} />
-                <Area type="monotone" dataKey="Users" stroke="#6366f1" strokeWidth={2} fill="url(#usersGrad)" />
-              </AreaChart>
+                <Bar dataKey="Users" fill="#6366f1" radius={[3, 3, 0, 0]} maxBarSize={32} />
+              </BarChart>
             </ResponsiveContainer>
           </div>
         </div>

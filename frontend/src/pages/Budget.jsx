@@ -195,8 +195,9 @@ function CategoryCard({ cat, budgetStatus, onUpdate, onDelete, canDelete }) {
 
   const statusInfo = budgetStatus?.find((b) => b.category_id === cat.id || b.name === cat.name) || {}
   const spent = statusInfo.spent_cents || 0
-  const limit = cat.budget_cents || statusInfo.budget_cents || 0
-  const pct = limit > 0 ? Math.min((spent / limit) * 100, 100) : 0
+  const budget = cat.budget_cents != null ? cat.budget_cents : (statusInfo.budget_cents || 0)
+  const pct = budget > 0 ? Math.min((spent / budget) * 100, 100) : 0
+  const limit = budget
   const remaining = Math.max(limit - spent, 0)
 
   const barColor = limit > 0
