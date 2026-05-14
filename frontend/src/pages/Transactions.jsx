@@ -535,6 +535,7 @@ export default function Transactions() {
   const [csvLoading, setCsvLoading] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [confirmDeleteId, setConfirmDeleteId] = useState(null)
+  const [viewMode, setViewMode] = useState('all') // 'all' | 'recurring'
 
   const showToast = (message, type='success') => setToast({ message, type })
 
@@ -565,6 +566,7 @@ export default function Transactions() {
       if (filterParty) params.party_id = filterParty
       if (filterPaymentMethod) params.payment_method = filterPaymentMethod
       if (filterReconciled !== '') params.is_reconciled = filterReconciled === 'true'
+      if (viewMode === 'recurring') params.is_recurring = true
       const [res, sumRes] = await Promise.all([
         getTransactions(params),
         getTransactionSummary({ ...params, skip: undefined, limit: undefined }),
@@ -575,7 +577,7 @@ export default function Transactions() {
       setSummary(sumRes.data?.data || null)
     } catch { showToast('Failed to load transactions.','error') }
     finally { setLoading(false) }
-  }, [page, filters, filterParty, filterPaymentMethod, filterReconciled])
+  }, [page, filters, filterParty, filterPaymentMethod, filterReconciled, viewMode])
 
   useEffect(() => { fetchTransactions() }, [fetchTransactions])
   useEffect(() => {
@@ -705,6 +707,22 @@ export default function Transactions() {
           <p className="text-sm mt-1" style={{ color:'#94a3b8' }}>Manage your income and expenses</p>
         </div>
         <div className="flex items-center gap-2">
+          <div className="flex rounded-xl border p-0.5 gap-0.5" style={{ borderColor: '#334155', backgroundColor: '#0f172a' }}>
+            <button
+              onClick={() => { setViewMode('all'); setPage(0) }}
+              className="px-4 py-1.5 rounded-lg text-sm font-medium transition-colors"
+              style={{ backgroundColor: viewMode === 'all' ? '#334155' : 'transparent', color: viewMode === 'all' ? '#f1f5f9' : '#64748b' }}
+            >
+              All
+            </button>
+            <button
+              onClick={() => { setViewMode('recurring'); setPage(0) }}
+              className="px-4 py-1.5 rounded-lg text-sm font-medium transition-colors"
+              style={{ backgroundColor: viewMode === 'recurring' ? '#334155' : 'transparent', color: viewMode === 'recurring' ? '#f1f5f9' : '#64748b' }}
+            >
+              🔁 Recurring
+            </button>
+          </div>
           <button
             onClick={handleExport}
             disabled={exporting}
@@ -839,6 +857,17 @@ export default function Transactions() {
               </span>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Recurring summary banner */}
+      {viewMode === 'recurring' && total > 0 && (
+        <div className="mb-4 rounded-xl p-4 border flex items-center gap-3" style={{ backgroundColor: '#6366f115', borderColor: '#6366f130' }}>
+          <span className="text-xl">🔁</span>
+          <div>
+            <p className="text-sm font-semibold text-white">{total} recurring transaction{total !== 1 ? 's' : ''}</p>
+            <p className="text-xs mt-0.5" style={{ color: '#6366f1' }}>These transactions repeat regularly. Edit any to update it or unmark as recurring.</p>
+          </div>
         </div>
       )}
 

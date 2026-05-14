@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Query, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import case, func, or_
 from sqlalchemy.orm import Session
 
@@ -683,6 +684,56 @@ def analytics_anomalies(
     return APIResponse(data=result)
 
 
+@router.get("/analytics/category-breakdown", dependencies=[Depends(get_current_admin)])
+def category_breakdown(db: Session = Depends(get_db)):
+    from datetime import date, timedelta
+    cutoff = date.today() - timedelta(days=30)
+    rows = (
+        db.query(
+            Category.name,
+            Category.color,
+            func.sum(func.abs(Transaction.amount_cents)).label("total_cents"),
+            func.count(Transaction.id).label("tx_count"),
+        )
+        .join(Transaction, Transaction.category_id == Category.id)
+        .filter(
+            Transaction.deleted_at.is_(None),
+            Transaction.is_income.is_(False),
+            Transaction.date >= cutoff,
+        )
+        .group_by(Category.id, Category.name, Category.color)
+        .order_by(func.sum(func.abs(Transaction.amount_cents)).desc())
+        .limit(10)
+        .all()
+    )
+    return APIResponse(data=[
+        {"name": r.name, "color": r.color or "#6366f1", "total_cents": r.total_cents, "tx_count": r.tx_count}
+        for r in rows
+    ])
+
+
+@router.get("/analytics/budget-compliance", dependencies=[Depends(get_current_admin)])
+def budget_compliance(db: Session = Depends(get_db)):
+    from datetime import date
+    today = date.today()
+    month_start = today.replace(day=1)
+    # Users who have at least one category with a non-zero budget assigned to them
+    users_with_budget = (
+        db.query(Category.user_id)
+        .filter(Category.user_id.isnot(None), Category.budget_cents > 0)
+        .distinct()
+        .count()
+    )
+    total_users = db.query(func.count(User.id)).scalar() or 0
+    if users_with_budget == 0:
+        return APIResponse(data={"compliance_pct": 0, "users_with_budget": 0, "total_users": total_users})
+    return APIResponse(data={
+        "users_with_budget": users_with_budget,
+        "total_users": total_users,
+        "budget_adoption_pct": round(users_with_budget / max(total_users, 1) * 100, 1),
+    })
+
+
 @router.get("/analytics/recommendations")
 def analytics_recommendations(
     db: Session = Depends(get_db),
@@ -941,6 +992,37 @@ def list_audit_logs(
     ]
 
     return APIResponse(data=result, total=total)
+
+
+# ---------------------------------------------------------------------------
+# User Password Reset
+# ---------------------------------------------------------------------------
+
+class PasswordResetPayload(BaseModel):
+    new_password: str
+
+@router.post("/users/{user_id}/reset-password", dependencies=[Depends(get_current_admin)])
+def admin_reset_user_password(
+    user_id: int,
+    payload: PasswordResetPayload,
+    db: Session = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if len(payload.new_password) < 8:
+        raise HTTPException(status_code=422, detail="Password must be at least 8 characters")
+    user.password_hash = hash_password(payload.new_password)
+    db.add(AdminAuditLog(
+        admin_id=admin.id,
+        action="reset_user_password",
+        target_type="User",
+        target_id=user_id,
+        detail=f"Password reset by admin {admin.username}",
+    ))
+    db.commit()
+    return APIResponse(data={"message": "Password reset successfully"})
 
 
 # ---------------------------------------------------------------------------

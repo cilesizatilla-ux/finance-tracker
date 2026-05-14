@@ -54,6 +54,7 @@ export default function Login() {
   const [form, setForm] = useState({ name: '', email: '', password: '' })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [showForgotInfo, setShowForgotInfo] = useState(false)
 
   const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
 
@@ -299,6 +300,25 @@ export default function Login() {
                 : (mode === 'login' ? 'Sign in' : 'Create account')}
             </button>
           </form>
+
+          {mode === 'login' && (
+            <div className="text-center mt-4">
+              <button
+                type="button"
+                onClick={() => setShowForgotInfo(!showForgotInfo)}
+                className="text-xs"
+                style={{ color: '#6366f1' }}
+              >
+                Forgot password?
+              </button>
+              {showForgotInfo && (
+                <div className="mt-3 rounded-xl p-3 text-xs border" style={{ backgroundColor: '#6366f115', borderColor: '#6366f130', color: '#a5b4fc' }}>
+                  Password resets are handled by your administrator.<br/>
+                  Contact: <strong>admin@financetracker.local</strong>
+                </div>
+              )}
+            </div>
+          )}
 
           <p className="text-center text-sm mt-6" style={{ color: '#64748b' }}>
             {mode === 'login' ? "Don't have an account? " : 'Already have an account? '}

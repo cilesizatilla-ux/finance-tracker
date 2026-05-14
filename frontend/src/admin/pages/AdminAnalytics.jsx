@@ -59,6 +59,7 @@ export default function AdminAnalytics() {
   const [paymentMethods, setPaymentMethods] = useState([])
   const [anomalies, setAnomalies] = useState([])
   const [trends, setTrends] = useState([])
+  const [categoryBreakdown, setCategoryBreakdown] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [anomalyPage, setAnomalyPage] = useState(0)
@@ -96,6 +97,12 @@ export default function AdminAnalytics() {
     }
     fetchTrends()
   }, [trendMonths])
+
+  useEffect(() => {
+    adminApi.get('/analytics/category-breakdown')
+      .then(res => setCategoryBreakdown(res.data?.data || []))
+      .catch(() => {})
+  }, [])
 
   if (loading) {
     return (
@@ -327,6 +334,39 @@ export default function AdminAnalytics() {
           )}
         </div>
       </section>
+
+      {/* 5. Top Spending Categories (Last 30 Days) */}
+      {categoryBreakdown.length > 0 && (
+        <div className="rounded-2xl border p-6 mt-6" style={{ backgroundColor: '#1e293b', borderColor: '#334155' }}>
+          <h2 className="text-base font-semibold text-white mb-1">Top Spending Categories (Last 30 Days)</h2>
+          <p className="text-xs mb-6" style={{ color: '#64748b' }}>Platform-wide expense breakdown</p>
+          <div className="space-y-3">
+            {(() => {
+              const maxCents = Math.max(...categoryBreakdown.map(c => c.total_cents), 1)
+              return categoryBreakdown.map((cat, i) => (
+                <div key={i}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-medium text-white">{cat.name}</span>
+                    <span className="text-sm font-semibold" style={{ color: '#f1f5f9' }}>
+                      ${(cat.total_cents / 100).toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                      <span className="text-xs ml-2" style={{ color: '#64748b' }}>{cat.tx_count} txns</span>
+                    </span>
+                  </div>
+                  <div className="h-2 rounded-full" style={{ backgroundColor: '#334155' }}>
+                    <div
+                      className="h-2 rounded-full transition-all"
+                      style={{
+                        width: `${(cat.total_cents / maxCents) * 100}%`,
+                        backgroundColor: cat.color || '#6366f1',
+                      }}
+                    />
+                  </div>
+                </div>
+              ))
+            })()}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -63,6 +63,7 @@ export default function AdminDashboard() {
   const [trends, setTrends] = useState([])
   const [userGrowth, setUserGrowth] = useState([])
   const [recommendations, setRecommendations] = useState([])
+  const [budgetCompliance, setBudgetCompliance] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [lastUpdated, setLastUpdated] = useState(null)
@@ -82,6 +83,9 @@ export default function AdminDashboard() {
       setUserGrowth(ugRes.data?.data || ugRes.data || [])
       setRecommendations(recoRes.data?.data || recoRes.data || [])
       setLastUpdated(new Date())
+      adminApi.get('/analytics/budget-compliance')
+        .then(res => setBudgetCompliance(res.data?.data))
+        .catch(() => {})
     } catch {
       setError('Failed to load dashboard data.')
     } finally {
@@ -238,6 +242,15 @@ export default function AdminDashboard() {
             </svg>
           }
         />
+        {budgetCompliance && (
+          <StatCard
+            label="Budget Adoption"
+            value={`${budgetCompliance.budget_adoption_pct}%`}
+            icon="📋"
+            accent="#10b981"
+            sub={`${budgetCompliance.users_with_budget} of ${budgetCompliance.total_users} users`}
+          />
+        )}
       </div>
 
       {/* Charts */}

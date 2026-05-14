@@ -36,6 +36,9 @@ export default function AdminUserDetail() {
   const [loading, setLoading] = useState(true)
   const [txLoading, setTxLoading] = useState(false)
   const [suspendLoading, setSuspendLoading] = useState(false)
+  const [showResetModal, setShowResetModal] = useState(false)
+  const [resetPassword, setResetPassword] = useState('')
+  const [resetLoading, setResetLoading] = useState(false)
   const [error, setError] = useState(null)
   const PER_PAGE = 20
   const { toast, ToastContainer } = useAdminToast()
@@ -100,6 +103,21 @@ export default function AdminUserDetail() {
       toast.error(err.response?.data?.detail || 'Failed to update user status.')
     } finally {
       setSuspendLoading(false)
+    }
+  }
+
+  async function handleResetPassword() {
+    if (resetPassword.length < 8) { toast.error('Password must be at least 8 characters'); return }
+    setResetLoading(true)
+    try {
+      await adminApi.post(`/users/${userId}/reset-password`, { new_password: resetPassword })
+      toast.success('Password reset successfully')
+      setShowResetModal(false)
+      setResetPassword('')
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to reset password')
+    } finally {
+      setResetLoading(false)
     }
   }
 
@@ -178,6 +196,13 @@ export default function AdminUserDetail() {
               style={{ borderColor: '#f59e0b50', color: '#fbbf24', backgroundColor: '#f59e0b15' }}
             >
               Impersonate User
+            </button>
+            <button
+              onClick={() => setShowResetModal(true)}
+              className="px-4 py-2 rounded-xl text-sm font-medium border"
+              style={{ borderColor: '#ef444450', color: '#fca5a5', backgroundColor: '#ef444420' }}
+            >
+              Reset Password
             </button>
             <button
               onClick={handleSuspend}
@@ -328,6 +353,39 @@ export default function AdminUserDetail() {
           </div>
         )}
       </div>
+      {showResetModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}>
+          <div className="w-full max-w-sm rounded-2xl border p-6 shadow-2xl" style={{ backgroundColor: '#1e293b', borderColor: '#334155' }}>
+            <h3 className="text-base font-semibold text-white mb-4">Reset Password</h3>
+            <p className="text-sm mb-4" style={{ color: '#94a3b8' }}>
+              Set a new password for <strong className="text-white">{user?.email}</strong>
+            </p>
+            <input
+              type="password"
+              value={resetPassword}
+              onChange={e => setResetPassword(e.target.value)}
+              placeholder="New password (min 8 chars)"
+              className="w-full px-4 py-3 rounded-xl text-sm text-white border outline-none focus:ring-2 focus:ring-indigo-500 mb-4"
+              style={{ backgroundColor: '#0f172a', borderColor: '#334155' }}
+            />
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setShowResetModal(false); setResetPassword('') }}
+                className="flex-1 py-2 rounded-xl text-sm border"
+                style={{ borderColor: '#334155', color: '#94a3b8' }}
+              >Cancel</button>
+              <button
+                onClick={handleResetPassword}
+                disabled={resetLoading}
+                className="flex-1 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
+                style={{ backgroundColor: '#ef4444' }}
+              >
+                {resetLoading ? 'Resetting...' : 'Reset Password'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <ToastContainer />
     </div>
   )
