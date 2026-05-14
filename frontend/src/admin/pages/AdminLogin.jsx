@@ -53,18 +53,22 @@ export default function AdminLogin() {
               {error}
             </div>
           )}
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-5" noValidate autoComplete="off">
+            {/* Honeypot to prevent browser autofill */}
+            <input type="text" name="prevent_autofill" style={{ display: 'none' }} readOnly />
+            <input type="password" name="prevent_password" style={{ display: 'none' }} readOnly />
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: '#94a3b8' }}>
-                Username
+                Username or Email
               </label>
               <input
                 type="text"
+                name="username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required
-                autoComplete="username"
-                placeholder="admin"
+                autoComplete="new-password"
+                placeholder="admin or admin@financetracker.local"
                 className="w-full px-4 py-3 rounded-xl text-sm text-white placeholder-slate-600 border outline-none focus:ring-2 focus:ring-indigo-500 transition"
                 style={{ backgroundColor: '#0f172a', borderColor: '#334155' }}
               />
@@ -75,10 +79,11 @@ export default function AdminLogin() {
               </label>
               <input
                 type="password"
+                name="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                autoComplete="current-password"
+                autoComplete="new-password"
                 placeholder="••••••••"
                 className="w-full px-4 py-3 rounded-xl text-sm text-white placeholder-slate-600 border outline-none focus:ring-2 focus:ring-indigo-500 transition"
                 style={{ backgroundColor: '#0f172a', borderColor: '#334155' }}
