@@ -76,6 +76,17 @@ export default function AdminUserDetail() {
     }
   }
 
+  async function handleImpersonate() {
+    try {
+      const res = await adminApi.post(`/users/${userId}/impersonate`)
+      const { token } = res.data?.data || res.data
+      window.open(`/login?impersonate=${token}`, '_blank')
+      toast.success('Impersonation token generated — new tab opened')
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to generate impersonation token')
+    }
+  }
+
   async function handleSuspend() {
     setSuspendLoading(true)
     try {
@@ -160,17 +171,26 @@ export default function AdminUserDetail() {
               </p>
             </div>
           </div>
-          <button
-            onClick={handleSuspend}
-            disabled={suspendLoading}
-            className="px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50"
-            style={isSuspended
-              ? { backgroundColor: '#22c55e20', color: '#4ade80' }
-              : { backgroundColor: '#ef444420', color: '#fca5a5' }
-            }
-          >
-            {suspendLoading ? '...' : isSuspended ? 'Unsuspend User' : 'Suspend User'}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleImpersonate}
+              className="px-4 py-2 rounded-xl text-sm font-medium border"
+              style={{ borderColor: '#f59e0b50', color: '#fbbf24', backgroundColor: '#f59e0b15' }}
+            >
+              Impersonate User
+            </button>
+            <button
+              onClick={handleSuspend}
+              disabled={suspendLoading}
+              className="px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50"
+              style={isSuspended
+                ? { backgroundColor: '#22c55e20', color: '#4ade80' }
+                : { backgroundColor: '#ef444420', color: '#fca5a5' }
+              }
+            >
+              {suspendLoading ? '...' : isSuspended ? 'Unsuspend User' : 'Suspend User'}
+            </button>
+          </div>
         </div>
       </div>
 

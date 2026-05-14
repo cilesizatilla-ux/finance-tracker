@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts'
 import { getCashflow, getBudgetStatus, getTransactions, getTopCategories } from '../api/index.js'
 import CurrencyAmount from '../components/CurrencyAmount.jsx'
+import OnboardingWizard from '../components/OnboardingWizard.jsx'
 
 function SkeletonBlock({ className = '' }) {
   return (
@@ -75,6 +76,8 @@ function CategoryBadge({ color, name }) {
 }
 
 export default function Dashboard() {
+  const navigate = useNavigate()
+  const [showOnboarding, setShowOnboarding] = useState(!localStorage.getItem('ft_onboarded'))
   const [cashflow, setCashflow] = useState([])
   const [budget, setBudget] = useState([])
   const [transactions, setTransactions] = useState([])
@@ -187,6 +190,9 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      {showOnboarding && (
+        <OnboardingWizard onComplete={() => setShowOnboarding(false)} />
+      )}
       {/* Page header */}
       <div>
         <h1 className="text-2xl font-bold text-white">

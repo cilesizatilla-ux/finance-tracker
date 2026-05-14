@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getParties, createParty, updateParty, deleteParty } from '../api/index.js'
+import { getParties, createParty, updateParty, deleteParty, getPartyStats } from '../api/index.js'
 
 const PARTY_TYPES = ['vendor', 'customer', 'both']
 
@@ -179,6 +179,7 @@ const TYPE_COLORS = {
 
 export default function Parties() {
   const [parties, setParties] = useState([])
+  const [partyStats, setPartyStats] = useState({})
   const [loading, setLoading] = useState(true)
   const [filterType, setFilterType] = useState('all')
   const [search, setSearch] = useState('')
@@ -192,6 +193,11 @@ export default function Parties() {
     try {
       const res = await getParties()
       setParties(res.data.data || [])
+      const statsRes = await getPartyStats()
+      const statsArr = statsRes.data?.data || []
+      const statsMap = {}
+      statsArr.forEach(s => { statsMap[s.id] = s })
+      setPartyStats(statsMap)
     } catch {
       setParties([])
     } finally {
@@ -343,6 +349,21 @@ export default function Parties() {
                           <p className="font-medium text-white">{party.name}</p>
                           {party.notes && (
                             <p className="text-xs truncate max-w-[160px]" style={{ color: '#64748b' }}>{party.notes}</p>
+                          )}
+                          {partyStats[party.id] && (
+                            <div className="flex gap-4 mt-2 text-xs" style={{ color: '#64748b' }}>
+                              <span>{partyStats[party.id].tx_count} transactions</span>
+                              {partyStats[party.id].expense_cents > 0 && (
+                                <span style={{ color: '#ef4444' }}>
+                                  −${(partyStats[party.id].expense_cents / 100).toFixed(2)} spent
+                                </span>
+                              )}
+                              {partyStats[party.id].income_cents > 0 && (
+                                <span style={{ color: '#22c55e' }}>
+                                  +${(partyStats[party.id].income_cents / 100).toFixed(2)} received
+                                </span>
+                              )}
+                            </div>
                           )}
                         </div>
                       </div>

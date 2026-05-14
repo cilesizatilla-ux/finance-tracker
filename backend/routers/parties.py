@@ -38,6 +38,36 @@ def create_party(
     return APIResponse(data=PartyOut.model_validate(party))
 
 
+@router.get("/stats")
+def party_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from sqlalchemy import func
+    from backend.models import Transaction
+    parties = db.query(Party).filter(Party.user_id == current_user.id).order_by(Party.name).all()
+    result = []
+    for p in parties:
+        txns = db.query(Transaction).filter(
+            Transaction.user_id == current_user.id,
+            Transaction.party_id == p.id,
+            Transaction.deleted_at.is_(None),
+        ).with_entities(Transaction.amount_cents, Transaction.is_income).all()
+        tx_count = len(txns)
+        income_cents = sum(t.amount_cents for t in txns if t.is_income)
+        expense_cents = sum(abs(t.amount_cents) for t in txns if not t.is_income)
+        result.append({
+            "id": p.id,
+            "name": p.name,
+            "party_type": p.party_type,
+            "tx_count": tx_count,
+            "income_cents": income_cents,
+            "expense_cents": expense_cents,
+        })
+    from backend.schemas import APIResponse
+    return APIResponse(data=result)
+
+
 @router.get("/{party_id}", response_model=APIResponse[PartyOut])
 def get_party(
     party_id: int,

@@ -523,6 +523,9 @@ export default function Transactions() {
   const [sortDir, setSortDir] = useState('desc')
 
   const [filters, setFilters] = useState({ start:'', end:'', category_id:'', type:'all', search:'' })
+  const [filterParty, setFilterParty] = useState('')
+  const [filterPaymentMethod, setFilterPaymentMethod] = useState('')
+  const [filterReconciled, setFilterReconciled] = useState('')
   const [searchValue, setSearchValue] = useState('')
   const searchDebounceRef = useRef(null)
   const [summary, setSummary] = useState(null)
@@ -559,6 +562,9 @@ export default function Transactions() {
       if (filters.category_id) params.category_id = filters.category_id
       if (filters.type !== 'all') params.type = filters.type
       if (filters.search) params.search = filters.search
+      if (filterParty) params.party_id = filterParty
+      if (filterPaymentMethod) params.payment_method = filterPaymentMethod
+      if (filterReconciled !== '') params.is_reconciled = filterReconciled === 'true'
       const [res, sumRes] = await Promise.all([
         getTransactions(params),
         getTransactionSummary({ ...params, skip: undefined, limit: undefined }),
@@ -569,7 +575,7 @@ export default function Transactions() {
       setSummary(sumRes.data?.data || null)
     } catch { showToast('Failed to load transactions.','error') }
     finally { setLoading(false) }
-  }, [page, filters])
+  }, [page, filters, filterParty, filterPaymentMethod, filterReconciled])
 
   useEffect(() => { fetchTransactions() }, [fetchTransactions])
   useEffect(() => {
@@ -774,6 +780,47 @@ export default function Transactions() {
             Clear
           </button>
         )}
+        <div className="w-full flex flex-wrap gap-3 mt-3">
+          <select
+            value={filterParty}
+            onChange={e => { setFilterParty(e.target.value); setPage(0) }}
+            className="px-3 py-2 rounded-xl text-sm border outline-none"
+            style={{ backgroundColor: '#0f172a', borderColor: '#334155', color: '#94a3b8' }}
+          >
+            <option value="">All parties</option>
+            {parties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          <select
+            value={filterPaymentMethod}
+            onChange={e => { setFilterPaymentMethod(e.target.value); setPage(0) }}
+            className="px-3 py-2 rounded-xl text-sm border outline-none"
+            style={{ backgroundColor: '#0f172a', borderColor: '#334155', color: '#94a3b8' }}
+          >
+            <option value="">All methods</option>
+            {['card','cash','transfer','check','other'].map(m => (
+              <option key={m} value={m}>{m.charAt(0).toUpperCase() + m.slice(1)}</option>
+            ))}
+          </select>
+          <select
+            value={filterReconciled}
+            onChange={e => { setFilterReconciled(e.target.value); setPage(0) }}
+            className="px-3 py-2 rounded-xl text-sm border outline-none"
+            style={{ backgroundColor: '#0f172a', borderColor: '#334155', color: '#94a3b8' }}
+          >
+            <option value="">All reconciled</option>
+            <option value="true">Reconciled</option>
+            <option value="false">Unreconciled</option>
+          </select>
+          {(filterParty || filterPaymentMethod || filterReconciled) && (
+            <button
+              onClick={() => { setFilterParty(''); setFilterPaymentMethod(''); setFilterReconciled(''); setPage(0) }}
+              className="px-3 py-2 rounded-xl text-sm border"
+              style={{ borderColor: '#ef444450', color: '#fca5a5', backgroundColor: '#ef444420' }}
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Period summary bar */}

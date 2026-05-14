@@ -11,6 +11,8 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy import case, func, or_
 from sqlalchemy.orm import Session
 
+from jose import jwt as jose_jwt
+
 from backend.admin_auth import (
     create_admin_token,
     get_current_admin,
@@ -18,6 +20,7 @@ from backend.admin_auth import (
     require_super_admin,
     verify_password,
 )
+from backend.auth import ALGORITHM, SECRET_KEY
 from backend.database import get_db
 from backend.models import (
     AdminAuditLog,
@@ -938,3 +941,37 @@ def list_audit_logs(
     ]
 
     return APIResponse(data=result, total=total)
+
+
+# ---------------------------------------------------------------------------
+# User Impersonation
+# ---------------------------------------------------------------------------
+
+@router.post("/users/{user_id}/impersonate")
+def impersonate_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(get_current_admin),
+):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    profile = db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
+    if profile and profile.is_suspended:
+        raise HTTPException(status_code=403, detail="Cannot impersonate a suspended user")
+
+    expire = datetime.now(timezone.utc) + timedelta(hours=1)
+    token = jose_jwt.encode(
+        {"sub": str(user.id), "email": user.email, "exp": expire},
+        SECRET_KEY,
+        algorithm=ALGORITHM,
+    )
+
+    _log_audit(
+        db, current_admin.id, "impersonate_user",
+        target_type="User", target_id=user_id,
+        detail={"email": user.email},
+    )
+
+    return APIResponse(data={"token": token, "user_email": user.email})

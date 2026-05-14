@@ -100,6 +100,9 @@ export const updateParty = (id, data) =>
 export const deleteParty = (id) =>
   api.delete(`/parties/${id}`)
 
+export const getPartyStats = () =>
+  api.get('/parties/stats')
+
 // Receipt extraction
 export const extractReceipt = (file) => {
   const formData = new FormData()

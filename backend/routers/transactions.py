@@ -46,7 +46,7 @@ def _enrich_party(txn: Transaction, db: Session, party_cache: dict, cat_map: dic
     return out
 
 
-def _build_query(db, user_id, category_id, start_date, end_date, type_filter, is_income, search=None):
+def _build_query(db, user_id, category_id, start_date, end_date, type_filter, is_income, search=None, party_id=None, payment_method=None, is_reconciled=None):
     q = db.query(Transaction).filter(
         Transaction.deleted_at.is_(None),
         Transaction.user_id == user_id,
@@ -59,6 +59,12 @@ def _build_query(db, user_id, category_id, start_date, end_date, type_filter, is
         q = q.filter(Transaction.date <= end_date)
     if search:
         q = q.filter(Transaction.description.ilike(f"%{search}%"))
+    if party_id is not None:
+        q = q.filter(Transaction.party_id == party_id)
+    if payment_method is not None:
+        q = q.filter(Transaction.payment_method == payment_method)
+    if is_reconciled is not None:
+        q = q.filter(Transaction.is_reconciled.is_(is_reconciled))
     effective_income = is_income
     if type_filter == "income":
         effective_income = True
@@ -77,12 +83,15 @@ def list_transactions(
     is_income: Optional[bool] = Query(None),
     type: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
+    party_id: Optional[int] = Query(None),
+    payment_method: Optional[str] = Query(None),
+    is_reconciled: Optional[bool] = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=500),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    q = _build_query(db, current_user.id, category_id, start_date, end_date, type, is_income, search)
+    q = _build_query(db, current_user.id, category_id, start_date, end_date, type, is_income, search, party_id, payment_method, is_reconciled)
     total = q.count()
     txns = q.order_by(Transaction.date.desc(), Transaction.id.desc()).offset(skip).limit(limit).all()
     cat_ids = {t.category_id for t in txns if t.category_id}
@@ -99,10 +108,13 @@ def summarize_transactions(
     is_income: Optional[bool] = Query(None),
     type: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
+    party_id: Optional[int] = Query(None),
+    payment_method: Optional[str] = Query(None),
+    is_reconciled: Optional[bool] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    q = _build_query(db, current_user.id, category_id, start_date, end_date, type, is_income, search)
+    q = _build_query(db, current_user.id, category_id, start_date, end_date, type, is_income, search, party_id, payment_method, is_reconciled)
     txns = q.with_entities(Transaction.amount_cents, Transaction.is_income).all()
     income = sum(t.amount_cents for t in txns if t.is_income)
     expense = sum(abs(t.amount_cents) for t in txns if not t.is_income)

@@ -57,6 +57,18 @@ export default function Login() {
 
   const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
 
+  // Handle impersonation token from admin
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const token = params.get('impersonate')
+    if (token) {
+      localStorage.setItem('ft_token', token)
+      // Clean URL and redirect to home
+      window.history.replaceState({}, '', '/')
+      window.location.href = '/'
+    }
+  }, [])
+
   // Show error from OAuth callback redirects (e.g. ?error=google_denied)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
