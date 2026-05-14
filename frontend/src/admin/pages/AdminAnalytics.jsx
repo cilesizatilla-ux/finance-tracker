@@ -60,6 +60,7 @@ export default function AdminAnalytics() {
   const [anomalies, setAnomalies] = useState([])
   const [trends, setTrends] = useState([])
   const [categoryBreakdown, setCategoryBreakdown] = useState([])
+  const [dailyActivity, setDailyActivity] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [anomalyPage, setAnomalyPage] = useState(0)
@@ -101,6 +102,12 @@ export default function AdminAnalytics() {
   useEffect(() => {
     adminApi.get('/analytics/category-breakdown')
       .then(res => setCategoryBreakdown(res.data?.data || []))
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    adminApi.get('/analytics/daily-activity')
+      .then(res => setDailyActivity(res.data?.data || []))
       .catch(() => {})
   }, [])
 
@@ -364,6 +371,68 @@ export default function AdminAnalytics() {
                 </div>
               ))
             })()}
+          </div>
+        </div>
+      )}
+
+      {/* 6. User Activity Heatmap */}
+      {dailyActivity.length > 0 && (
+        <div className="rounded-2xl border p-6 mt-6" style={{ backgroundColor: '#1e293b', borderColor: '#334155' }}>
+          <h2 className="text-base font-semibold text-white mb-1">User Activity Heatmap</h2>
+          <p className="text-xs mb-6" style={{ color: '#64748b' }}>Daily active users — last 90 days</p>
+          {(() => {
+            const maxCount = Math.max(...dailyActivity.map(d => d.count), 1)
+            // Arrange into weeks (columns of 7)
+            const weeks = []
+            for (let i = 0; i < dailyActivity.length; i += 7) {
+              weeks.push(dailyActivity.slice(i, i + 7))
+            }
+            const getColor = (count) => {
+              if (count === 0) return '#1e293b'
+              const intensity = count / maxCount
+              if (intensity > 0.75) return '#4f46e5'
+              if (intensity > 0.5) return '#6366f1'
+              if (intensity > 0.25) return '#818cf8'
+              return '#c7d2fe30'
+            }
+            const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
+            return (
+              <div className="flex gap-1">
+                {/* Day labels */}
+                <div className="flex flex-col gap-1 mr-1">
+                  {DAY_LABELS.map((d, i) => (
+                    <div key={i} className="w-3 h-3 flex items-center justify-end text-xs" style={{ color: '#475569', fontSize: 9 }}>
+                      {i % 2 === 1 ? d : ''}
+                    </div>
+                  ))}
+                </div>
+                {/* Week columns */}
+                {weeks.map((week, wi) => (
+                  <div key={wi} className="flex flex-col gap-1">
+                    {/* Week label (month abbr on first day of month) */}
+                    {week.map((day, di) => {
+                      const date = new Date(day.date + 'T00:00:00')
+                      return (
+                        <div
+                          key={di}
+                          title={`${day.date}: ${day.count} active user${day.count !== 1 ? 's' : ''}`}
+                          className="w-3 h-3 rounded-sm cursor-default"
+                          style={{ backgroundColor: getColor(day.count), border: '1px solid #0f172a' }}
+                        />
+                      )
+                    })}
+                  </div>
+                ))}
+              </div>
+            )
+          })()}
+          {/* Legend */}
+          <div className="flex items-center gap-2 mt-4" style={{ color: '#475569' }}>
+            <span className="text-xs">Less</span>
+            {['#c7d2fe30', '#818cf8', '#6366f1', '#4f46e5'].map((c, i) => (
+              <div key={i} className="w-3 h-3 rounded-sm" style={{ backgroundColor: c, border: '1px solid #0f172a' }} />
+            ))}
+            <span className="text-xs">More</span>
           </div>
         </div>
       )}

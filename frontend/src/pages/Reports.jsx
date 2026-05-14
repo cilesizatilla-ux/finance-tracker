@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { shareReport, listShares, deleteShare, getCashflow } from '../api/index.js'
+import { shareReport, listShares, deleteShare, getCashflow, getTopCategories } from '../api/index.js'
 import CurrencyAmount from '../components/CurrencyAmount.jsx'
 
 const MONTHS = [
@@ -84,6 +84,7 @@ export default function Reports() {
   const [statsLoading, setStatsLoading] = useState(false)
   const [toast, setToast] = useState(null)
   const [deletingId, setDeletingId] = useState(null)
+  const [topCats, setTopCats] = useState([])
 
   const showToast = (message, type = 'success') => setToast({ message, type })
 
@@ -123,6 +124,18 @@ export default function Reports() {
     }
     load()
     return () => { cancelled = true }
+  }, [selectedMonth, selectedYear])
+
+  // Fetch top categories for the selected month
+  useEffect(() => {
+    const y = selectedYear
+    const m = String(selectedMonth).padStart(2, '0')
+    const lastDay = new Date(y, selectedMonth, 0).getDate()
+    const startDate = `${y}-${m}-01`
+    const endDate = `${y}-${m}-${lastDay}`
+    getTopCategories({ start_date: startDate, end_date: endDate, limit: 8 })
+      .then(r => setTopCats(r.data?.data || []))
+      .catch(() => setTopCats([]))
   }, [selectedMonth, selectedYear])
 
   const handleGenerate = async () => {
@@ -175,9 +188,21 @@ export default function Reports() {
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-white">Reports</h1>
-        <p className="text-sm mt-1" style={{ color: '#94a3b8' }}>Generate and share monthly financial summaries</p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Reports</h1>
+          <p className="text-sm mt-1" style={{ color: '#94a3b8' }}>Generate and share monthly financial summaries</p>
+        </div>
+        <button
+          onClick={() => window.print()}
+          className="px-4 py-2 rounded-xl text-sm font-medium border flex items-center gap-2"
+          style={{ borderColor: '#334155', color: '#94a3b8', backgroundColor: '#1e293b' }}
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
+          </svg>
+          Print Report
+        </button>
       </div>
 
       {/* Generator card */}
@@ -322,6 +347,40 @@ export default function Reports() {
           )}
         </div>
       </div>
+
+      {/* Category breakdown chart */}
+      {topCats.length > 0 && (
+        <div className="rounded-2xl border p-6" style={{ backgroundColor: '#1e293b', borderColor: '#334155' }}>
+          <h2 className="text-base font-semibold text-white mb-1">Spending by Category</h2>
+          <p className="text-xs mb-5" style={{ color: '#64748b' }}>
+            {MONTHS[selectedMonth - 1]} {selectedYear} — top expense categories
+          </p>
+          <div className="space-y-3">
+            {(() => {
+              const maxCents = Math.max(...topCats.map(c => c.total_cents || 0), 1)
+              return topCats.map((cat, i) => (
+                <div key={i}>
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: cat.color || '#6366f1' }} />
+                      <span className="text-sm text-white">{cat.name}</span>
+                    </div>
+                    <span className="text-sm font-semibold text-white">
+                      ${((cat.total_cents || 0) / 100).toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                    </span>
+                  </div>
+                  <div className="h-2 rounded-full" style={{ backgroundColor: '#334155' }}>
+                    <div
+                      className="h-2 rounded-full"
+                      style={{ width: `${((cat.total_cents || 0) / maxCents) * 100}%`, backgroundColor: cat.color || '#6366f1' }}
+                    />
+                  </div>
+                </div>
+              ))
+            })()}
+          </div>
+        </div>
+      )}
 
       {/* Previous shares */}
       <div className="rounded-2xl border shadow-sm" style={{ backgroundColor: '#1e293b', borderColor: '#334155' }}>

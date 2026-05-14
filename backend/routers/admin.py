@@ -1082,6 +1082,40 @@ def broadcast_notification(
     db.commit()
     return APIResponse(data={"message": "Notification broadcast", "id": notif.id})
 
+@router.get("/analytics/daily-activity", dependencies=[Depends(get_current_admin)])
+def daily_activity(db: Session = Depends(get_db)):
+    from datetime import date, timedelta
+    from sqlalchemy import cast, Date
+
+    end_date = date.today()
+    start_date = end_date - timedelta(days=89)  # 90 days inclusive
+
+    # Count users who were last active on each day using last_active_at
+    # Group by date and count distinct users
+    rows = (
+        db.query(
+            cast(User.last_active_at, Date).label("day"),
+            func.count(User.id).label("count"),
+        )
+        .filter(
+            User.last_active_at.isnot(None),
+            cast(User.last_active_at, Date) >= start_date,
+            cast(User.last_active_at, Date) <= end_date,
+        )
+        .group_by(cast(User.last_active_at, Date))
+        .all()
+    )
+
+    # Build a full dict for all 90 days (0 for missing days)
+    day_map = {str(r.day): r.count for r in rows}
+    result = []
+    for i in range(90):
+        d = start_date + timedelta(days=i)
+        result.append({"date": str(d), "count": day_map.get(str(d), 0)})
+
+    return APIResponse(data=result)
+
+
 @router.get("/notifications")
 def list_admin_notifications(
     db: Session = Depends(get_db),

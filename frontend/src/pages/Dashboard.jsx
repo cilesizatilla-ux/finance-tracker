@@ -137,6 +137,29 @@ export default function Dashboard() {
   const netSavings = totalIncome - totalExpenses
   const categoryCount = budget.length
 
+  const savingsRate = curIncome > 0 ? Math.round((curNet / curIncome) * 100) : 0
+  const savingsRateStr = `${savingsRate > 0 ? '+' : ''}${savingsRate}%`
+
+  // Financial health score out of 100
+  let healthScore = 0
+  // Up to 40 pts for savings rate
+  if (savingsRate >= 30) healthScore += 40
+  else if (savingsRate >= 20) healthScore += 30
+  else if (savingsRate >= 10) healthScore += 20
+  else if (savingsRate >= 0) healthScore += 10
+  // Up to 30 pts for budget categories set up
+  if (categoryCount >= 5) healthScore += 30
+  else if (categoryCount >= 3) healthScore += 20
+  else if (categoryCount >= 1) healthScore += 10
+  // Up to 30 pts for consistent cashflow data (have at least 3 months of data)
+  const monthsWithData = cashflow.filter(m => m.income_cents > 0 || m.expense_cents > 0).length
+  if (monthsWithData >= 6) healthScore += 30
+  else if (monthsWithData >= 3) healthScore += 20
+  else if (monthsWithData >= 1) healthScore += 10
+
+  const healthLabel = healthScore >= 80 ? 'Excellent' : healthScore >= 60 ? 'Good' : healthScore >= 40 ? 'Fair' : 'Needs Work'
+  const healthColor = healthScore >= 80 ? '#22c55e' : healthScore >= 60 ? '#3b82f6' : healthScore >= 40 ? '#f59e0b' : '#ef4444'
+
   const chartData = cashflow.map((m) => ({
     month: m.month ? `${MONTH_NAMES[m.month - 1]} '${String(m.year).slice(2)}` : '',
     Income: m.income_cents || 0,
@@ -303,6 +326,43 @@ export default function Dashboard() {
             </svg>
           }
         />
+        <KpiCard
+          label="Savings Rate"
+          value={savingsRateStr}
+          accent={savingsRate >= 20 ? '#22c55e' : savingsRate >= 10 ? '#f59e0b' : '#ef4444'}
+          icon="📈"
+          trend={savingsRate >= 20 ? 'On track — great job!' : savingsRate >= 0 ? 'Try to save 20%+' : 'Spending exceeds income'}
+        />
+      </div>
+
+      {/* Financial Health Score */}
+      <div className="rounded-2xl border p-5 mb-6" style={{ backgroundColor: '#1e293b', borderColor: '#334155' }}>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wider mb-1" style={{ color: '#94a3b8' }}>Financial Health Score</p>
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl font-bold" style={{ color: healthColor }}>{healthScore}</span>
+              <span className="text-sm font-semibold" style={{ color: healthColor }}>{healthLabel}</span>
+              <span className="text-sm" style={{ color: '#475569' }}>/ 100</span>
+            </div>
+          </div>
+          <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-2xl" style={{ backgroundColor: `${healthColor}18` }}>
+            {healthScore >= 80 ? '🏆' : healthScore >= 60 ? '👍' : healthScore >= 40 ? '📊' : '⚠️'}
+          </div>
+        </div>
+        {/* Progress bar */}
+        <div className="h-3 rounded-full" style={{ backgroundColor: '#334155' }}>
+          <div
+            className="h-3 rounded-full transition-all duration-500"
+            style={{ width: `${healthScore}%`, backgroundColor: healthColor }}
+          />
+        </div>
+        {/* Breakdown hints */}
+        <div className="flex gap-4 mt-3 text-xs" style={{ color: '#64748b' }}>
+          <span>Savings: {savingsRate >= 20 ? '✓' : '○'} {Math.min(savingsRate >= 30 ? 40 : savingsRate >= 20 ? 30 : savingsRate >= 10 ? 20 : 10, 40)}/40 pts</span>
+          <span>Budget: {categoryCount >= 3 ? '✓' : '○'} {categoryCount >= 5 ? 30 : categoryCount >= 3 ? 20 : categoryCount >= 1 ? 10 : 0}/30 pts</span>
+          <span>History: {monthsWithData >= 3 ? '✓' : '○'} {monthsWithData >= 6 ? 30 : monthsWithData >= 3 ? 20 : monthsWithData >= 1 ? 10 : 0}/30 pts</span>
+        </div>
       </div>
 
       {/* Cash Flow Chart */}
